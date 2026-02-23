@@ -1,0 +1,2664 @@
+{
+  "name": "JANUS - Judgement Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM users WHERE email = $1 AND role IN ('Owner', 'Resident', 'Agent');",
+        "options": {
+          "queryReplacement": "={{ $json.query.senderEmail }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -96,
+        -48
+      ],
+      "id": "215fba6a-c181-4e61-8234-659d3dff91f0",
+      "name": "Select Owner Resident Agent emails",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "RvXfNjZojFo2nFVq",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and process the data\nfor (const item of $input.all()) {\n  \n  // Check if this is data from the orchestrator (has senderEmail and Focus_Issues_in_Email fields)\n  const isFromOrchestrator = item.json.senderEmail && item.json.Focus_Issues_in_Email;\n  \n  if (isFromOrchestrator) {\n    // NEW: Data from orchestrator tool - map to original field structure\n    console.log(\"Processing data from orchestrator\");\n    \n    // Map orchestrator data to match original field names exactly\n    item.json.senderName = item.json.senderName || '';\n    item.json.senderEmail = item.json.senderEmail || '';\n    item.json.subject = item.json.subject || '';\n    item.json.date = item.json.date || new Date().toISOString();\n    \n    // KEY: Use the focused Focus_Issues_in_Email field as body content (the separated issue)\n    item.json.body = item.json.Focus_Issues_in_Email || item.json.original_email_body || '';\n    \n    // Create all the text fields that original workflow expects\n    item.json.textHtml = item.json.body;\n    item.json.textPlain = item.json.body;\n    item.json.html = item.json.body;\n    item.json.text = item.json.body;\n    \n    // Create the from field in the format original workflow expects\n    item.json.from = `${item.json.senderName} <${item.json.senderEmail}>`;\n    \n    // Create to field\n    item.json.to = item.json.to || 'propertyconnectdemo@asccreative.com';\n    \n    // Handle attachments - ensure it's always an array like original\n    if (!item.json.attachments || !Array.isArray(item.json.attachments)) {\n      item.json.attachments = [];\n    }\n    \n    // Add metadata if it doesn't exist (optional, for completeness)\n    if (!item.json.metadata) {\n      item.json.metadata = {};\n    }\n    \n  } else {\n    // LEGACY: Original IMAP data processing (keep existing logic exactly)\n    console.log(\"Processing original IMAP data\");\n    \n    // Initialize attachments as an array\n    item.json.attachments = [];\n    \n    // Extract email and name from the 'from' field if available\n    if (item.json.from) {\n      try {\n        // Check if from is a string or an object with value property\n        if (typeof item.json.from === 'string') {\n          // Try to parse email and name from string format\n          const matches = item.json.from.match(/(.*)\\s*<(.*)>/);\n          if (matches && matches.length === 3) {\n            item.json.senderName = matches[1].trim();\n            item.json.senderEmail = matches[2].trim();\n          } else {\n            item.json.senderEmail = item.json.from;\n            item.json.senderName = item.json.from;\n          }\n        } else if (item.json.from.value && Array.isArray(item.json.from.value) && item.json.from.value.length > 0) {\n          // Extract from object format\n          item.json.senderName = item.json.from.value[0].name || '';\n          item.json.senderEmail = item.json.from.value[0].address || '';\n        }\n      } catch (error) {\n        console.log(\"Failed to extract email and name:\", error);\n        item.json.senderName = \"\";\n        item.json.senderEmail = \"\";\n      }\n    }\n    \n    // Extract email subject if not already present\n    if (!item.json.subject && item.json.headers && item.json.headers.subject) {\n      item.json.subject = item.json.headers.subject;\n    }\n    \n    // Extract email body from different possible formats\n    if (!item.json.body) {\n      // Try to get body from different possible properties\n      item.json.body = item.json.textHtml || \n                       item.json.html || \n                       item.json.textPlain || \n                       item.json.text || \n                       \"\";\n    }\n    \n    // Check if there are binary attachments\n    if (item.binary) {\n      for (const [key, binaryData] of Object.entries(item.binary)) {\n        try {\n          // Extract attachment details\n          const attachment = {\n            fileName: binaryData.fileName || null,\n            fileExtension: binaryData.fileExtension || null,\n            mimeType: binaryData.mimeType || null,\n            fileSize: binaryData.fileSize || null,\n          };\n          \n          // Validate that the attachment has a fileName\n          if (attachment.fileName) {\n            item.json.attachments.push(attachment);\n          }\n        } catch (error) {\n          console.log(`Failed to process attachment ${key}:`, error);\n        }\n      }\n    }\n    \n    // Ensure attachments is always an array\n    if (!Array.isArray(item.json.attachments)) {\n      item.json.attachments = [];\n    }\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        -48
+      ],
+      "id": "1eeb7dac-f9f9-40ac-b3e5-586b51cf8975",
+      "name": "Process attachments Code"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -528,
+        -48
+      ],
+      "id": "cb517d31-7b36-4a21-a3b7-94d2709f664c",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f91ab904-b2ea-4427-91cb-68fdc444e58a",
+              "leftValue": "={{ $json.role }}",
+              "rightValue": "=resident",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "cc85aca6-262d-4c4d-a1d4-b75ce43820fe",
+              "leftValue": "={{ $json.role }}",
+              "rightValue": "Resident",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        -48
+      ],
+      "id": "11e4de6c-3b32-4ad8-8394-e0041f9edf76",
+      "name": "If owner resident or agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        384,
+        144
+      ],
+      "id": "18c252d8-a651-417d-ab86-769802d264a2",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "6UM8Q2rnYdvFsmDF",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"email_classification\": {\n      \"type\": \"string\",\n      \"enum\": [\"initial\", \"not_initial\"],\n      \"description\": \"Classification of whether this is a new request or follow-up to existing issue\"\n    },\n    \"reasoning\": {\n      \"type\": \"string\",\n      \"description\": \"Brief explanation for the classification decision\"\n    }\n  },\n  \"required\": [\"email_classification\", \"reasoning\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        144
+      ],
+      "id": "db665480-a4f9-4db9-a7cb-53454b6eaa35",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Your role is to determine if an email from a resident is an INITIAL request or a follow-up to an EXISTING issue.\n\nCRITICAL INSTRUCTION: You must classify every email as either \"initial\" or \"not_initial\".\n\n*** WHAT IS AN INITIAL EMAIL ***\nAn initial email reports a NEW issue or request that hasn't been previously reported:\n- First-time reporting of a problem\n- New complaint about a different issue\n- Fresh request unrelated to previous communication\n- No reference to previous tickets, reports, or ongoing issues\n\n*** WHAT IS NOT INITIAL (EXISTING) EMAIL ***\nA not initial email is a follow-up about a previously reported issue:\n- Not looking like a first time email\n- Updates on existing problems (\"still leaking\", \"getting worse\")\n- Asking for status updates (\"any progress?\", \"when will this be fixed?\")\n- Additional information about reported issues\n- References to previous communication or tickets\n- Follow-up questions about ongoing matters\n- There is a ticket id in subject or body of the email\n\nIMPORTANT INDICATORS:\n- Look for phrases like: \"still\", \"update\", \"any news\", \"following up\", \"previously reported\"\n- Check for definite articles: \"THE leak\" vs \"A leak\" \n- References to time: \"last week I reported\", \"since my last email\"\n- Ticket ID mentions or reference numbers\n\nEMAIL CONTENT:\nSender: {{ $('When Executed by Another Workflow').item.json.query.senderEmail }}\nSubject: {{ $('When Executed by Another Workflow').item.json.query.subject }}\nBody: {{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}\nTimestamp: {{ $('When Executed by Another Workflow').item.json.query.date }}\n\nReturn JSON:\n{\n  \"email_classification\": \"initial\" | \"not_initial\",\n  \"reasoning\": \"Brief explanation for classification\"\n}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        384,
+        -64
+      ],
+      "id": "c705b13d-dc60-4c47-b40d-e54db365c7f3",
+      "name": "Initial / Not Initial Agent"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.email_classification }}",
+                    "rightValue": "initial",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "initial"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d161a46a-8553-4233-828e-2f6836a70915",
+                    "leftValue": "={{ $json.output.email_classification }}",
+                    "rightValue": "not_initial",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "not_initial"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        -64
+      ],
+      "id": "2e6c92f6-bd75-4f3c-a228-d91d24ff0d87",
+      "name": "Initial or Not Initial Email"
+    },
+    {
+      "parameters": {
+        "content": "## Initial Emailing Route\n",
+        "height": 460,
+        "width": 840,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        912,
+        -608
+      ],
+      "id": "0f85a250-edb2-4a6f-bb7c-95970ec08b4c",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        -256
+      ],
+      "id": "5e94938d-9c69-4aef-9551-bbbfee22be6f",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "6UM8Q2rnYdvFsmDF",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"is_building_responsibility\": {\n      \"type\": \"boolean\",\n      \"description\": \"Whether this issue is the building's responsibility to handle\"\n    },\n    \"type\": {\n      \"type\": \"string\",\n      \"enum\": [\"repair\", \"complaint\", \"condo_reject\", \"general_inquiries_or_redesign\"],\n      \"description\": \"Classification type for routing decision\"\n    },\n    \"reasoning\": {\n      \"type\": \"string\",\n      \"description\": \"Brief explanation for the classification decision\"\n    }\n  },\n  \"required\": [\"is_building_responsibility\", \"type\", \"reasoning\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1392,
+        -288
+      ],
+      "id": "74cc7c72-2652-44e6-bbcd-3a5b46f32655",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=AI AGENT PROMPT:\n================\n\nYour role is to analyze property management emails and determine:\n1. Whether this is the building's responsibility to handle\n2. The appropriate classification type for routing\n\nBUILDING RESPONSIBILITY ANALYSIS:\nYou must determine if this issue falls under the building's management responsibility based on:\n- Building maintenance and repairs (plumbing, electrical, heating, structural)\n- Noise complaints and bylaw violations\n- Common area issues and building rules enforcement\n- Safety and security concerns within the building\n\nNOT BUILDING RESPONSIBILITY:\n- Personal disputes between residents not involving building rules\n- Interior unit modifications or cosmetic preferences\n- Issues with personal belongings or furniture\n- General inquiries about neighborhood or city services\n- Requests for building redesign or major changes\n\nCLASSIFICATION TYPES:\n\n**IF BUILDING RESPONSIBILITY = TRUE:**\n- \"repair\" - Broken, damaged, or malfunctioning building systems/components that need fixing\n- \"complaint\" - Noise issues, bylaw violations, neighbor disputes involving building rules\n\n**IF BUILDING RESPONSIBILITY = FALSE:**\n- \"condo_reject\" - Issues that should be handled by individual condo owners or strata corporation\n- \"general_inquiries_or_redesign\" - General questions, suggestions, or requests for major building changes\n\nEMAIL CONTENT TO ANALYZE:\nSender: {{ $('When Executed by Another Workflow').item.json.query.senderEmail }}\nSubject: {{ $('When Executed by Another Workflow').item.json.query.subject }}\nBody: {{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}\nBuilding Type: {{ $json.building_type }}\nDate: {{ $('Process attachments Code').item.json.query.date }}\n\nIf Building Type = rental, It will never be a condo_reject\nIf it is a complain to a other resident, no matter how absurd still route as complaint and make is_building_responsibility true\n\nANALYSIS INSTRUCTIONS:\n1. Read the email content carefully\n2. Determine if this is a building management responsibility\n3. Classify into the appropriate type category\n4. Provide clear reasoning for your decision\n\nReturn JSON:\n{\n  \"is_building_responsibility\": true | false,\n  \"type\": \"repair\" | \"complaint\" | \"condo_reject\" | \"general_inquiries_or_redesign\",\n  \"reasoning\": \"Brief explanation for classification decision\"\n}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1168,
+        -464
+      ],
+      "id": "5f895ae3-60df-4996-9729-97f597704bf0",
+      "name": "Main Router Agent"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM buildings Where id = '{{ $('Select Owner Resident Agent emails').item.json.building_id }}'",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        960,
+        -448
+      ],
+      "id": "17c362cd-cf83-424b-824c-8a36278bd48d",
+      "name": "Building Type",
+      "credentials": {
+        "postgres": {
+          "id": "RvXfNjZojFo2nFVq",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f905c96c-a473-49c6-81ef-01f08757e43b",
+              "leftValue": "={{ $json.output.is_building_responsibility }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        -464
+      ],
+      "id": "6edd2347-b1bb-4b05-b3a2-bc7a4846b6e9",
+      "name": "Building Responsibility?"
+    },
+    {
+      "parameters": {
+        "content": "## Building Responsibility",
+        "height": 620,
+        "width": 820,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        -1408
+      ],
+      "id": "7b9315cd-b9f8-4e41-9a00-af3ba770350e",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.type }}",
+                    "rightValue": "repair",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "repair"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aeacc476-270f-403e-a404-bf8196dfe65a",
+                    "leftValue": "={{ $json.output.type }}",
+                    "rightValue": "complaint",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complaint"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1840,
+        -1136
+      ],
+      "id": "628665c9-20ba-44c7-80ce-428f6aa0f29c",
+      "name": "Repair or Complaint"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9422e33d-1297-40ca-85f5-73ab734b21e0",
+              "name": "senderEmail",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "9f7a53d7-495a-4c1e-b92f-589c379fc6a3",
+              "name": "senderName",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "15f23d46-370a-4dc2-91d6-f022bd8588e1",
+              "name": "subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "4acc8168-722b-4884-bfb8-01c2f8ad60a5",
+              "name": "body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "8a964d75-a40f-46d4-9840-651b19486bab",
+              "name": "attachments",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.attachments }}",
+              "type": "string"
+            },
+            {
+              "id": "7d266eff-12f9-4c54-90b3-ab2621dc282b",
+              "name": "date",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "bafb81f0-88f2-47fb-bc57-c533cbb3b508",
+              "name": "building_id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "88fe0b0c-4fa3-4c94-a7a4-cc17e8705c6f",
+              "name": "status",
+              "value": "initial",
+              "type": "string"
+            },
+            {
+              "id": "c05f0855-faba-4f3e-ac96-748461b73ac4",
+              "name": "ticket_id",
+              "value": "null",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        -1280
+      ],
+      "id": "1b8531af-80f3-45f9-a8cc-91a0088ed6a1",
+      "name": "Repair Preparation"
+    },
+    {
+      "parameters": {
+        "content": "## Not \nBuilding Responsibility",
+        "height": 620,
+        "width": 820,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        -768
+      ],
+      "id": "07d750fe-d0ee-424a-b07d-883f3672818b",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.type }}",
+                    "rightValue": "condo_reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "condo_reject"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aeacc476-270f-403e-a404-bf8196dfe65a",
+                    "leftValue": "={{ $json.output.type }}",
+                    "rightValue": "general_inquiries_or_redesign",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "general_inquiries_or_redesign"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1840,
+        -544
+      ],
+      "id": "530b6df7-8741-4380-bb18-af1d17f3fdd7",
+      "name": "Condo Reject or General Inquiries"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9422e33d-1297-40ca-85f5-73ab734b21e0",
+              "name": "senderEmail",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "9f7a53d7-495a-4c1e-b92f-589c379fc6a3",
+              "name": "senderName",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "15f23d46-370a-4dc2-91d6-f022bd8588e1",
+              "name": "subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "4acc8168-722b-4884-bfb8-01c2f8ad60a5",
+              "name": "body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "8a964d75-a40f-46d4-9840-651b19486bab",
+              "name": "attachments",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.attachments }}",
+              "type": "string"
+            },
+            {
+              "id": "7d266eff-12f9-4c54-90b3-ab2621dc282b",
+              "name": "date",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "bafb81f0-88f2-47fb-bc57-c533cbb3b508",
+              "name": "building_id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "88fe0b0c-4fa3-4c94-a7a4-cc17e8705c6f",
+              "name": "status",
+              "value": "initial",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2144,
+        -656
+      ],
+      "id": "9a9174fa-3fec-40ce-9968-bfd82492da28",
+      "name": "CondoReject"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2144,
+        -400
+      ],
+      "id": "bb1c3c6d-3b9d-4fc6-9bf5-312c2610eba2",
+      "name": "General Inquiries "
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "oNYGt5MbyDiIYBTl",
+          "mode": "list",
+          "cachedResultName": "JANUS - Repair Main WorkFlow"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2384,
+        -1280
+      ],
+      "id": "853453d9-b60a-4296-be81-80569a1949c0",
+      "name": "Execute Workflow3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9422e33d-1297-40ca-85f5-73ab734b21e0",
+              "name": "senderEmail",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "9f7a53d7-495a-4c1e-b92f-589c379fc6a3",
+              "name": "senderName",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "15f23d46-370a-4dc2-91d6-f022bd8588e1",
+              "name": "subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "4acc8168-722b-4884-bfb8-01c2f8ad60a5",
+              "name": "body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "8a964d75-a40f-46d4-9840-651b19486bab",
+              "name": "attachments",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.attachments }}",
+              "type": "string"
+            },
+            {
+              "id": "7d266eff-12f9-4c54-90b3-ab2621dc282b",
+              "name": "date",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "bafb81f0-88f2-47fb-bc57-c533cbb3b508",
+              "name": "building_id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "88fe0b0c-4fa3-4c94-a7a4-cc17e8705c6f",
+              "name": "status",
+              "value": "initial",
+              "type": "string"
+            },
+            {
+              "id": "c05f0855-faba-4f3e-ac96-748461b73ac4",
+              "name": "ticket_id",
+              "value": "null",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        384
+      ],
+      "id": "9140ed20-2b01-48d2-8a02-3342252b78e8",
+      "name": "Not Initial Email Preparation"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "htyVpgDqOSCNC4L0",
+          "mode": "list",
+          "cachedResultName": "JANUS - Unified Not Initial workflow Without Ticket Id"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        384
+      ],
+      "id": "2a2b0dc3-f365-4683-91ce-319dec2d2ac9",
+      "name": "Unified workflow for Complaint / Repair"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3a80f961-f475-4f1b-bca6-e5badd3d08cd",
+              "leftValue": "={{ $json.ticketId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1280,
+        48
+      ],
+      "id": "a36f6b4d-c918-48b9-9c32-18843d1fb30f",
+      "name": "Ticket id?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM public.tickets \nWHERE ticket_id = '{{ $('Extract Ticket ID').item.json.ticketId }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        112
+      ],
+      "id": "ec192a4a-b60e-4393-98a4-02822a97491b",
+      "name": "Ticket Category",
+      "credentials": {
+        "postgres": {
+          "id": "RvXfNjZojFo2nFVq",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Access the subject and body from the input\nconst emailSubject = $input.item.json.Subject || '';\nconst emailBody = $input.item.json.Body || '';\n\n// Log values for debugging\nconsole.log('Subject:', emailSubject);\nconsole.log('Body sample:', emailBody.substring(0, 100) + '...');\n\n// Multiple patterns to extract ticket ID\nlet ticketId = null;\n\n// Pattern 1: Look for \"Ticket ID: ticket-XXXXXXXX\" in subject or body\nconst ticketIdMatch = emailSubject.match(/Ticket ID: (ticket-[\\w-]+)/) || \n                      emailBody.match(/Ticket ID: (ticket-[\\w-]+)/);\n\nif (ticketIdMatch) {\n    ticketId = ticketIdMatch[1];\n}\n\n// Pattern 2: If subject itself is a ticket ID format (like \"ticket-1\", \"ticket-123\", etc.)\nelse if (emailSubject.match(/^ticket-[\\w-]+$/)) {\n    ticketId = emailSubject;\n}\n\n// Pattern 3: Look for ticket ID anywhere in subject or body (more flexible)\nelse {\n    const flexibleMatch = emailSubject.match(/ticket-[\\w-]+/) || \n                         emailBody.match(/ticket-[\\w-]+/);\n    if (flexibleMatch) {\n        ticketId = flexibleMatch[0];\n    }\n}\n\nconsole.log('Extracted Ticket ID:', ticketId);\n\n// Return the result with the ticket ID\nreturn {\n    json: {\n        ...($input.item.json),  // Keep all existing data\n        ticketId: ticketId      // Add the extracted ticket ID\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        48
+      ],
+      "id": "1a44a4b2-2029-4a53-a49b-f2f5e907dcef",
+      "name": "Extract Ticket ID",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "113ed965-e335-4dc4-b6cd-99fd5de7fa07",
+              "name": "Subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "e680ceaa-a5e5-4828-a908-94c5087a5bb0",
+              "name": "Body",
+              "value": "={{ $('Process attachments Code').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "3713798e-a1ca-485b-a09c-42817299ab54",
+              "name": "role",
+              "value": "=resident",
+              "type": "string"
+            },
+            {
+              "id": "206aa3bc-907d-4186-a8d9-5a29f06c73b8",
+              "name": "Building_id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "50e6d4f1-429b-431d-844a-3285887db712",
+              "name": "suite_number",
+              "value": "=",
+              "type": "string"
+            },
+            {
+              "id": "ba3dd0fc-947c-4e05-a373-1ca438c8b9d4",
+              "name": "name",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "184cbb5a-3fa8-4c9f-afa8-eb6d2998854b",
+              "name": "Email",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        944,
+        48
+      ],
+      "id": "f2426f1e-a3e7-49ee-9fe4-03234971b0ec",
+      "name": "Preparation"
+    },
+    {
+      "parameters": {
+        "content": "## Initial Email Routing",
+        "height": 1360,
+        "width": 1780
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        864,
+        -1440
+      ],
+      "id": "a4527d56-5332-4e23-8b01-e587c1bc4f67",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "repair",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "repair"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a797a67c-44b6-49af-97c9-b49d2dedd818",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "complaint",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complaint"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "489077cc-bad7-48c0-85ce-d1a6336653b9",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "Self-Help",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Self-Help"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1728,
+        112
+      ],
+      "id": "1167c8bb-12df-4d74-960a-36eaa259d32e",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "content": "## Goes to Existing Repair Ticket Workflow",
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        0
+      ],
+      "id": "0741e88b-2696-42f7-9086-c8b6bb365f8c",
+      "name": "Sticky Note17"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "nAP2ZSUVqSZUJHMd",
+          "mode": "list",
+          "cachedResultName": "JANUS - Existing Repair Ticket"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2112,
+        0
+      ],
+      "id": "15c8808e-1e51-4b9a-9b38-f9a61ce86af7",
+      "name": "Execute Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4a5cf25d-53d2-408a-9a15-205340d3de0f",
+              "name": "repair category",
+              "value": "={{ $('Ticket Category').item.json.repair_category }}",
+              "type": "string"
+            },
+            {
+              "id": "5296ecb7-35bb-46a1-a1c1-ae074611b373",
+              "name": "Resident Name",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "d9b85e67-eb18-4bd2-a6f1-7cc75ececbf6",
+              "name": "Resident Email",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "995d22b8-b131-4345-bf88-6c608aab6a59",
+              "name": "Email Body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "23800fa5-7d93-4784-8106-54d78ec70603",
+              "name": "Email Subject",
+              "value": "={{ $('Extract Ticket ID').item.json.Subject }}",
+              "type": "string"
+            },
+            {
+              "id": "9ee75ad8-4d83-414f-98d2-9a83a5183eb4",
+              "name": "Suite Number",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.suite_number }}",
+              "type": "string"
+            },
+            {
+              "id": "db5f44a3-195f-4a5f-9bed-c655b73ad82b",
+              "name": "Building id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "78d17b09-ba70-4b5d-be61-cec32bde44e9",
+              "name": "Email Context",
+              "value": "=Sender Email Address: {{ $('When Executed by Another Workflow').item.json.query.senderEmail }} Email Subject: {{ $('When Executed by Another Workflow').item.json.query.subject }} Email Body: {{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }} attachments:  {{ $('Process attachments Code').item.json.attachments.map(attachment => `- ${attachment.fileName} (${attachment.fileSize})`).join('\\n') }} sender_name:{{ $('When Executed by Another Workflow').item.json.query.senderName }}  timestamp: {{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "8b7cc992-b36e-4b01-a6ae-806147a0473f",
+              "name": "ticket id",
+              "value": "={{ $('Extract Ticket ID').item.json.ticketId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        0
+      ],
+      "id": "74ff2d1d-61ad-4add-a128-c4fef20c3b15",
+      "name": "Repair existing Prepare"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "nA6pS55t4RTdhMVR",
+          "mode": "list",
+          "cachedResultName": "Janus - Self Help Back and Forth"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2128,
+        384
+      ],
+      "id": "2adb5d9b-adee-474e-b50b-b7519ab5dc26",
+      "name": "Execute Workflow11"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4a5cf25d-53d2-408a-9a15-205340d3de0f",
+              "name": "repair category",
+              "value": "={{ $('Ticket Category').item.json.type }}",
+              "type": "string"
+            },
+            {
+              "id": "5296ecb7-35bb-46a1-a1c1-ae074611b373",
+              "name": "Resident Name",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "d9b85e67-eb18-4bd2-a6f1-7cc75ececbf6",
+              "name": "Resident Email",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "995d22b8-b131-4345-bf88-6c608aab6a59",
+              "name": "Email Body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "23800fa5-7d93-4784-8106-54d78ec70603",
+              "name": "Email Subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "9ee75ad8-4d83-414f-98d2-9a83a5183eb4",
+              "name": "Suite Number",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.suite_number }}",
+              "type": "string"
+            },
+            {
+              "id": "db5f44a3-195f-4a5f-9bed-c655b73ad82b",
+              "name": "Building id",
+              "value": "={{ $('If owner resident or agent').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "78d17b09-ba70-4b5d-be61-cec32bde44e9",
+              "name": "Email Context",
+              "value": "=Sender Email Address: {{ $('When Executed by Another Workflow').item.json.query.senderEmail }} Email Subject: {{ $('When Executed by Another Workflow').item.json.query.subject }} Email Body: {{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }} attachments:  {{ $('Process attachments Code').item.json.attachments.map(attachment => `- ${attachment.fileName} (${attachment.fileSize})`).join('\\n') }} sender_name:  timestamp: {{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "8b7cc992-b36e-4b01-a6ae-806147a0473f",
+              "name": "ticket id",
+              "value": "={{ $('Ticket Category').item.json.ticket_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1904,
+        368
+      ],
+      "id": "7ecce3b1-766c-4c35-b35e-fff4c80b8fc1",
+      "name": "Self-Help Prepare"
+    },
+    {
+      "parameters": {
+        "content": "## Goes to Existing Self Help Repair Ticket Workflow",
+        "height": 120,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        368
+      ],
+      "id": "39dcfec1-c557-4080-bf31-4e044a4b5b45",
+      "name": "Sticky Note18"
+    },
+    {
+      "parameters": {
+        "content": "## Not Initial Email Routing",
+        "height": 640,
+        "width": 1560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        864,
+        -48
+      ],
+      "id": "23bfb9a4-bf1e-4aab-b5dc-8c208dc2fa6a",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## With Ticket Id\n",
+        "height": 580,
+        "width": 860,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        -32
+      ],
+      "id": "7e35fdea-bf91-4891-8190-bb0fe34b73e4",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## Without Ticket Id",
+        "height": 280,
+        "width": 500,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        912,
+        304
+      ],
+      "id": "b520c1ff-b2a7-4093-a1d3-d61e88fe8d33",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## Goes to Unified Not initial no ticket id workflow",
+        "width": 280,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        560
+      ],
+      "id": "e875533f-9af8-4b01-9a19-5d502674061e",
+      "name": "Sticky Note19"
+    },
+    {
+      "parameters": {
+        "content": "## Preparation/ Resident Route",
+        "height": 540,
+        "width": 1380
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -208
+      ],
+      "id": "e05233fe-359d-4ef0-8d52-9a445679b8a1",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## Goes to New Repair Ticket Workflow",
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        -1328
+      ],
+      "id": "14da4c5f-e767-44dc-9fc7-cf8e1afad1c6",
+      "name": "Sticky Note20"
+    },
+    {
+      "parameters": {
+        "content": "## Goes to New Complaint Ticket Workflow",
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2592,
+        -1040
+      ],
+      "id": "02924cde-5637-412a-ade1-600f139dfe02",
+      "name": "Sticky Note21"
+    },
+    {
+      "parameters": {
+        "fromEmail": "rulesdemo@asccreative.com",
+        "toEmail": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+        "subject": "Unauthorized Request",
+        "html": "=Dear {{ $('When Executed by Another Workflow').item.json.query.senderName }},  We could not verify your association with the building. Please contact the property manager for assistance.  Best regards, Property Management Team",
+        "options": {
+          "appendAttribution": true
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        1632
+      ],
+      "id": "a16c5745-a5c4-4b36-87f1-9fec859b891b",
+      "name": "Send Unauthorized Email",
+      "webhookId": "d3b9b8dc-ddd3-464a-aec6-233aeef760a1",
+      "credentials": {
+        "smtp": {
+          "id": "YKhuxBa83LOWX4K6",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets\nSET state = 'Completed'\nWHERE ticket_id = ' {{ $json.output.ticketid }}';\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        288,
+        528
+      ],
+      "id": "5cb08b04-d0b0-4972-957b-730b8bbedbec",
+      "name": "Update Ticket State to Completed",
+      "credentials": {
+        "postgres": {
+          "id": "RvXfNjZojFo2nFVq",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "propertyconnectdemo@asccreative.com",
+        "toEmail": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+        "subject": "=Subject: Repair Request Completed (#{{ $('If1').item.json.output.ticketid }})",
+        "html": "=Dear {{ $('Check If Vendor Email').item.json.company_name }},\n\nYour repair request (#{{ $('If1').item.json.output.ticketid }}) has been completed. Thank you for your patience.\n\nBest regards,\nProperty Management Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        528
+      ],
+      "id": "15ff17c8-6b23-4b59-827c-b7f847017877",
+      "name": "Repair Request Completed Email",
+      "webhookId": "0b1e85bc-8199-4936-a7c0-c7201da50918",
+      "credentials": {
+        "smtp": {
+          "id": "YKhuxBa83LOWX4K6",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM vendors \nWHERE email = '{{ $('When Executed by Another Workflow').item.json.query.senderEmail }}' \nLIMIT 1;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -864,
+        640
+      ],
+      "id": "df1a36fd-893a-4be3-b681-4d0757377f75",
+      "name": "Check If Vendor Email",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "RvXfNjZojFo2nFVq",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "74e4e96b-94cd-4a8a-b92a-a62f88f4b60d",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -688,
+        640
+      ],
+      "id": "23efc958-6bcd-46e0-a664-1e39a1965b70",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Your role is to determine if the email confirms that a repair has been completed by a vendor.\nAnalyze the text and respond with a JSON object using the following format:\n\n- is_completion_confirmation: true or false,\n- reasoning: Brief explanation for your decision.\n- ticketid: the ticket id of the email\n\nEmail Subject:\n{{ $('When Executed by Another Workflow').item.json.query.subject }}\nEmail Body:\n{{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -448,
+        624
+      ],
+      "id": "e383c029-8be7-4c66-9ce5-4b4198f857be",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "81353fe2-6d23-4b94-af4f-635279df3d0d",
+              "leftValue": "={{ $json.output.is_completion_confirmation }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        624
+      ],
+      "id": "2356bf1a-7251-4113-a909-bf994a54f47f",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "content": "## Vendors Route",
+        "height": 420,
+        "width": 1080,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -896,
+        592
+      ],
+      "id": "9776ef77-bead-401b-9dd7-52b27faa7cc7",
+      "name": "Sticky Note14"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM buildings Where property_manager_email = '{{ $('When Executed by Another Workflow').item.json.query.senderEmail }}'",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -688,
+        1152
+      ],
+      "id": "7b729f00-b08c-476d-b818-463a33e21e0d",
+      "name": "Check If PM email",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "RvXfNjZojFo2nFVq",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "74e4e96b-94cd-4a8a-b92a-a62f88f4b60d",
+              "leftValue": "={{ $json.property_manager_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        1152
+      ],
+      "id": "045db20f-4bf0-46e0-a4e7-26bfe1cf85e6",
+      "name": "If6"
+    },
+    {
+      "parameters": {
+        "content": "## Property Manager Route\n",
+        "height": 460,
+        "width": 1400,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        1072
+      ],
+      "id": "a82a70ab-3951-4c58-b678-7b6db9b3b5b8",
+      "name": "Sticky Note13"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9ee75ad8-4d83-414f-98d2-9a83a5183eb4",
+              "name": "Vendor Email Subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "db5f44a3-195f-4a5f-9bed-c655b73ad82b",
+              "name": "Vendor EMail",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "78d17b09-ba70-4b5d-be61-cec32bde44e9",
+              "name": "Vendor Email body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "8b7cc992-b36e-4b01-a6ae-806147a0473f",
+              "name": "ticket id",
+              "value": "={{ $('AI Agent1').item.json.output.ticketid }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        272,
+        832
+      ],
+      "id": "f54c3610-4fb0-4499-8e87-95dfb4da0118",
+      "name": "Edit Fields9"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "mZ01JCxIqr0S8AGD",
+          "mode": "list",
+          "cachedResultName": "JANUS - Vendors Back and Forth"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        832
+      ],
+      "id": "e7754735-d3d2-4869-9546-0530465b0beb",
+      "name": "Execute Workflow6"
+    },
+    {
+      "parameters": {
+        "content": "## Vendors Back and Forth",
+        "height": 280,
+        "width": 600,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        224,
+        752
+      ],
+      "id": "042cd547-eca6-4fbb-ae3a-eee5d602b332",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9ee75ad8-4d83-414f-98d2-9a83a5183eb4",
+              "name": "Property Email Subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "db5f44a3-195f-4a5f-9bed-c655b73ad82b",
+              "name": "Property EMail",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "78d17b09-ba70-4b5d-be61-cec32bde44e9",
+              "name": "Property Email body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "8b7cc992-b36e-4b01-a6ae-806147a0473f",
+              "name": "ticket id",
+              "value": "={{ $json.output.ticketid }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        112,
+        1120
+      ],
+      "id": "dc209a0b-3221-4513-a7f1-2d373e296bc4",
+      "name": "Edit Fields10"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "BLwsvXcG1ThQgrIx",
+          "mode": "list",
+          "cachedResultName": "JANUS - Property Manager Back and forth"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        272,
+        1120
+      ],
+      "id": "d0372f9f-3c1f-4d41-8afe-604c9b1d536e",
+      "name": "Execute Workflow7"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are analyzing an email reply from a property manager to get the ticket id.\n\nEmail Subject:\n{{ $('When Executed by Another Workflow').item.json.query.subject }}\nEmail Body:\n{{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}\n\n- ticketid: the ticket id of the email\n\n\n",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -256,
+        1120
+      ],
+      "id": "fcf70fce-126e-4861-a195-c3e34a723ba4",
+      "name": "AI Agent9"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"ticketid\": {\n      \"type\": \"string\",\n      \"description\": \"The ticket ID extracted from the email\"\n    }\n  },\n  \"required\": [\"ticketid\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -48,
+        1392
+      ],
+      "id": "650a9490-1c98-4a50-b600-ee967f5d1216",
+      "name": "Structured Output Parser8"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -256,
+        1328
+      ],
+      "id": "4588d982-adb5-4b5e-bb4a-22a2c8c5fd18",
+      "name": "OpenAI Chat Model8",
+      "credentials": {
+        "openAiApi": {
+          "id": "6UM8Q2rnYdvFsmDF",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Update Completed repairs\nUpdate resolved repair requests to completed state.",
+        "height": 280,
+        "width": 580,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        224,
+        432
+      ],
+      "id": "e327a7b5-50ae-449e-ba74-85aa3155489a",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"is_completion_confirmation\": {\n      \"type\": \"boolean\"\n    },\n    \"reasoning\": {\n      \"type\": \"string\"\n    },\n    \"ticketid\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"is_completion_confirmation\",\n    \"reasoning\",\n    \"ticketid\"\n  ]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        864
+      ],
+      "id": "6dda45d8-4e7b-426a-a85d-6c80055bcfe3",
+      "name": "Structured Output Parser2"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -416,
+        848
+      ],
+      "id": "8ccf9c56-53b2-4b6a-a400-f4c6116285af",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "6UM8Q2rnYdvFsmDF",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Goes to Vendors Back and Forth Workflow",
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        768,
+        800
+      ],
+      "id": "817d25c9-8491-4840-ba09-ad2eff869675",
+      "name": "Sticky Note22"
+    },
+    {
+      "parameters": {
+        "content": "## Goes to Property Manager Back and Forth Workflow",
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        464,
+        1104
+      ],
+      "id": "5bda0f55-176d-444f-9768-747c45b9eabf",
+      "name": "Sticky Note24"
+    },
+    {
+      "parameters": {
+        "content": "## Unauthorize Sender",
+        "height": 300,
+        "width": 360,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        1552
+      ],
+      "id": "5f31980e-6a21-44c1-be9a-dbc47a7fe5e5",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9422e33d-1297-40ca-85f5-73ab734b21e0",
+              "name": "senderEmail",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "9f7a53d7-495a-4c1e-b92f-589c379fc6a3",
+              "name": "senderName",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "15f23d46-370a-4dc2-91d6-f022bd8588e1",
+              "name": "subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "4acc8168-722b-4884-bfb8-01c2f8ad60a5",
+              "name": "body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "8a964d75-a40f-46d4-9840-651b19486bab",
+              "name": "attachments",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.attachments }}",
+              "type": "string"
+            },
+            {
+              "id": "7d266eff-12f9-4c54-90b3-ab2621dc282b",
+              "name": "date",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "bafb81f0-88f2-47fb-bc57-c533cbb3b508",
+              "name": "building_id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "88fe0b0c-4fa3-4c94-a7a4-cc17e8705c6f",
+              "name": "status",
+              "value": "initial",
+              "type": "string"
+            },
+            {
+              "id": "c05f0855-faba-4f3e-ac96-748461b73ac4",
+              "name": "ticket_id",
+              "value": "null",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2128,
+        -1024
+      ],
+      "id": "994a744e-4a00-4f7e-9725-5b073870a1ff",
+      "name": "Complaint Preparation"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "JOrY17eTBT5HMbt5",
+          "mode": "list",
+          "cachedResultName": "JANUS - Complaint Workflow"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2368,
+        -1024
+      ],
+      "id": "10da282b-c41f-49ac-9f49-c5b675677169",
+      "name": "Execute Workflow4"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4a5cf25d-53d2-408a-9a15-205340d3de0f",
+              "name": "repair category",
+              "value": "={{ $('Ticket Category').item.json.repair_category }}",
+              "type": "string"
+            },
+            {
+              "id": "5296ecb7-35bb-46a1-a1c1-ae074611b373",
+              "name": "Resident Name",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderName }}",
+              "type": "string"
+            },
+            {
+              "id": "d9b85e67-eb18-4bd2-a6f1-7cc75ececbf6",
+              "name": "Resident Email",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.senderEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "995d22b8-b131-4345-bf88-6c608aab6a59",
+              "name": "Email Body",
+              "value": "={{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }}",
+              "type": "string"
+            },
+            {
+              "id": "23800fa5-7d93-4784-8106-54d78ec70603",
+              "name": "Email Subject",
+              "value": "={{ $('Extract Ticket ID').item.json.Subject }}",
+              "type": "string"
+            },
+            {
+              "id": "9ee75ad8-4d83-414f-98d2-9a83a5183eb4",
+              "name": "Suite Number",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.suite_number }}",
+              "type": "string"
+            },
+            {
+              "id": "db5f44a3-195f-4a5f-9bed-c655b73ad82b",
+              "name": "Building id",
+              "value": "={{ $('Select Owner Resident Agent emails').item.json.building_id }}",
+              "type": "string"
+            },
+            {
+              "id": "78d17b09-ba70-4b5d-be61-cec32bde44e9",
+              "name": "Email Context",
+              "value": "=Sender Email Address: {{ $('When Executed by Another Workflow').item.json.query.senderEmail }} Email Subject: {{ $('When Executed by Another Workflow').item.json.query.subject }} Email Body: {{ $('When Executed by Another Workflow').item.json.query.Focus_Issues_in_Email }} attachments:  {{ $('Process attachments Code').item.json.attachments.map(attachment => `- ${attachment.fileName} (${attachment.fileSize})`).join('\\n') }} sender_name:{{ $('When Executed by Another Workflow').item.json.query.senderName }}  timestamp: {{ $('When Executed by Another Workflow').item.json.query.date }}",
+              "type": "string"
+            },
+            {
+              "id": "8b7cc992-b36e-4b01-a6ae-806147a0473f",
+              "name": "ticket id",
+              "value": "={{ $('Extract Ticket ID').item.json.ticketId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        192
+      ],
+      "id": "e178e63c-83c8-45dd-af51-a44882c37935",
+      "name": "Complaint existing Prepare"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "JZ1PhOWW0YhA6VLD",
+          "mode": "list",
+          "cachedResultName": "JANUS - Existing Complaint Workflow"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2128,
+        192
+      ],
+      "id": "0d3c4039-0799-4a16-8bc6-c7b5a0f266e6",
+      "name": "Execute Workflow1"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": {
+            "senderEmail": "jeffreydomingo509@gmail.com",
+            "senderName": "Jeffrey Domingo",
+            "subject": "tenant in unit 102",
+            "date": "Mon, 30 Jun 2025 13:09:31 +0800",
+            "attachments": "None",
+            "original_email_body": "The tenant in unit 102 is so ugly and ruining my day with its face this is\na complain",
+            "Focus_Issues_in_Email": "The tenant in unit 102 is so ugly and ruining my day with its face this is\na complain"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Process attachments Code": {
+      "main": [
+        [
+          {
+            "node": "Select Owner Resident Agent emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Process attachments Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Owner Resident Agent emails": {
+      "main": [
+        [
+          {
+            "node": "If owner resident or agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If owner resident or agent": {
+      "main": [
+        [
+          {
+            "node": "Initial / Not Initial Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check If Vendor Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Initial / Not Initial Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Initial / Not Initial Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initial / Not Initial Agent": {
+      "main": [
+        [
+          {
+            "node": "Initial or Not Initial Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initial or Not Initial Email": {
+      "main": [
+        [
+          {
+            "node": "Building Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Main Router Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Main Router Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Building Type": {
+      "main": [
+        [
+          {
+            "node": "Main Router Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main Router Agent": {
+      "main": [
+        [
+          {
+            "node": "Building Responsibility?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Building Responsibility?": {
+      "main": [
+        [
+          {
+            "node": "Repair or Complaint",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Condo Reject or General Inquiries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repair or Complaint": {
+      "main": [
+        [
+          {
+            "node": "Repair Preparation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Complaint Preparation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Condo Reject or General Inquiries": {
+      "main": [
+        [
+          {
+            "node": "CondoReject",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "General Inquiries ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repair Preparation": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not Initial Email Preparation": {
+      "main": [
+        [
+          {
+            "node": "Unified workflow for Complaint / Repair",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket id?": {
+      "main": [
+        [
+          {
+            "node": "Ticket Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Initial Email Preparation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparation": {
+      "main": [
+        [
+          {
+            "node": "Extract Ticket ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Ticket ID": {
+      "main": [
+        [
+          {
+            "node": "Ticket id?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket Category": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Repair existing Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Complaint existing Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Self-Help Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repair existing Prepare": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Self-Help Prepare": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Ticket State to Completed": {
+      "main": [
+        [
+          {
+            "node": "Repair Request Completed Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Vendor Email": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check If PM email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Update Ticket State to Completed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If PM email": {
+      "main": [
+        [
+          {
+            "node": "If6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If6": {
+      "main": [
+        [
+          {
+            "node": "AI Agent9",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Unauthorized Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields9": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields10": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent9": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser8": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent9",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model8": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent9",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser2": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complaint Preparation": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CondoReject": {
+      "main": [
+        []
+      ]
+    },
+    "Complaint existing Prepare": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d6ff90c4-347f-45ff-a7ab-e1f35e7a10ed",
+  "meta": {
+    "instanceId": "6c3fc83f9f313856cb5083540ff0607fd4e98ee5c34143652ff05851a12f91a3"
+  },
+  "id": "U6eWXP10qDrVKO39",
+  "tags": [
+    {
+      "createdAt": "2025-05-07T11:34:25.938Z",
+      "updatedAt": "2025-05-07T11:34:25.938Z",
+      "id": "0PvcoSmllIjB2XUA",
+      "name": "Ticket System"
+    }
+  ]
+}

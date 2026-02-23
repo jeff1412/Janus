@@ -1,0 +1,173 @@
+{
+  "name": "JANUS - Starting Line",
+  "nodes": [
+    {
+      "parameters": {
+        "downloadAttachments": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        -240
+      ],
+      "id": "8c83eee6-221f-4ac2-bcf1-17f8b91d599c",
+      "name": "Email Trigger",
+      "credentials": {
+        "imap": {
+          "id": "dmqUTEL51tiJsftQ",
+          "name": "Property Connect"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\nYou are an email separator for a property management repair request system. Your job is to analyze incoming emails and determine if they contain multiple separate repair issues that should be processed independently.\n\n**CRITICAL RULE FOR SINGLE ISSUES:**\nIf there is only ONE repair issue in the email, the \"Issues\" field must be IDENTICAL to the \"original_email_body\" - copy it word for word, including greetings, signatures, and all text.\n\n**ANALYSIS PROCESS:**\n1. Read the entire email carefully\n2. Count the number of distinct repair/maintenance issues\n3. If COUNT = 1: Use entire email body as Issues field\n4. If COUNT > 1: Extract each issue separately\n\n**WHEN TO SEPARATE (MULTIPLE ISSUES):**\n- Multiple distinct repair issues in different locations (bathroom AND kitchen)\n- Different categories of repairs (plumbing AND electrical)\n- Clear indication of separate problems (numbered lists, \"also\", \"and\")\n- ALL issues appear to be NEW requests (no existing ticket references)\n\n**WHEN NOT TO SEPARATE (SINGLE ISSUE):**\n- Only one repair issue mentioned\n- Issues are related/connected (same system or area)\n- Any mention of existing tickets or follow-ups\n- Vague or unclear issue descriptions\n\n**TOOL USAGE EXAMPLES:**\n\n**Example 1 - SINGLE ISSUE (COPY ENTIRE EMAIL):**\nEmail: \"Hi there,\\n\\nOur suite is leaking from the ceiling in the bathroom.\\nCould you arrange for a plumber to look at this as soon as possible?\"\nAction: Issues = \"Hi there,\\n\\nOur suite is leaking from the ceiling in the bathroom.\\nCould you arrange for a plumber to look at this as soon as possible?\" (EXACT COPY)\n\n**Example 2 - MULTIPLE ISSUES (EXTRACT EACH):**\nEmail: \"Hi, my bathroom sink is leaking and also the kitchen light bulb is burnt out. Please help.\"\nTool Call 1: Issues = \"Bathroom sink is leaking\"\nTool Call 2: Issues = \"Kitchen light bulb is burnt out\"\n\n**CURRENT EMAIL TO PROCESS:**\nFrom: {{ $('Email Trigger').item.json.from }}\nSubject: {{ $('Email Trigger').item.json.subject }}\nDate: {{ $('Email Trigger').item.json.date }}\nBody: {{ $('Email Trigger').item.json.textPlain || $('Email Trigger').item.json.html }}\nAttachments: {{ $('Email Trigger').item.json.attachments ? 'Yes' : 'None' }}\n\nREMEMBER: For single issues, Issues field = complete original email body including greetings and signatures.",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        80,
+        -240
+      ],
+      "id": "2fea72cf-5221-4f2c-b192-d034a2ef864d",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        48,
+        0
+      ],
+      "id": "a5e0b0ef-f811-4e25-97b6-f4a8eda23a14",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "6UM8Q2rnYdvFsmDF",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "internal_prepnotes",
+        "description": "=Process a repair or maintenance request through the property management system. Call this tool once for single issues, or multiple times for emails containing separate repair problems. Each call will create and route one specific repair request through the appropriate workflow.",
+        "workflowId": {
+          "__rl": true,
+          "value": "U6eWXP10qDrVKO39",
+          "mode": "list",
+          "cachedResultName": "JANUS - Judgement Workflow"
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"senderEmail\": \"Email address of the person sending the repair request\",\n  \"senderName\": \"Full name of the sender\", \n  \"subject\": \"Email subject line, modify to focus on specific issue if separated\",\n  \"date\": \"Timestamp when email was received\",\n  \"attachments\": \"Array of attachment information from original email\",\n  \"original_email_body\": \"Complete original email body for context and reference\",\n  \"Focus_Issues_in_Email\": \"The issue separated here if there is one issue this is just the same exact copy with the original_email_body\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        288,
+        0
+      ],
+      "id": "bffd72a8-fba1-4e3e-8b43-b285a6260452",
+      "name": "process_repair_request"
+    }
+  ],
+  "pinData": {
+    "Email Trigger": [
+      {
+        "json": {
+          "textHtml": "<div dir=\"ltr\">Hi there,<br><br>Our suite is leaking from the ceiling in the bathroom.<br>Could you arrange for a plumber to look at this as soon as possible?</div>\r\n",
+          "textPlain": "Hi there,\r\n\r\nOur suite is leaking from the ceiling in the bathroom.\r\nCould you arrange for a plumber to look at this as soon as possible?\r\n",
+          "metadata": {
+            "return-path": "<jeffreydomingo509@gmail.com>",
+            "received": "from mail.asccreative.com (LHLO mail.asccreative.com) (209.141.58.252) by mail.asccreative.com with LMTP; Sat, 14 Jun 2025 20:07:15 -0700 (PDT)",
+            "x-virus-scanned": "amavis at asccreative.com",
+            "x-spam-flag": "NO",
+            "x-spam-score": "-2.443",
+            "x-spam-level": "",
+            "x-spam-status": "No, score=-2.443 required=5 tests=[BAYES_00=-1.9, DKIM_SIGNED=0.1, DKIM_VALID=-0.1, DKIM_VALID_AU=-0.1, DKIM_VALID_EF=-0.1, DMARC_PASS_NONE=-0.6, FREEMAIL_ENVFROM_END_DIGIT=0.25, FREEMAIL_FROM=0.001, HTML_MESSAGE=0.001, RCVD_IN_DNSWL_BLOCKED=0.001, RCVD_IN_MSPIKE_H3=0.001, RCVD_IN_MSPIKE_WL=0.001, RCVD_IN_VALIDITY_CERTIFIED_BLOCKED=0.001, RCVD_IN_VALIDITY_RPBL_BLOCKED=0.001, SPF_HELO_NONE=0.001, SPF_PASS=-0.001] autolearn=ham autolearn_force=no",
+            "authentication-results": "mail.asccreative.com (amavis); dkim=pass (2048-bit key) header.d=gmail.com",
+            "dkim-signature": "v=1; a=rsa-sha256; c=relaxed/relaxed;        d=gmail.com; s=20230601; t=1749956827; x=1750561627; darn=asccreative.com;        h=to:subject:message-id:date:from:mime-version:from:to:cc:subject         :date:message-id:reply-to;        bh=qiI3hkNi98DUxcSjTpBn6UL3SGM7Sm9AYWBcTzLKMsI=;        b=ZcLCJAw6KXfhai15+Q6vyZmKaybgWzKGSzv83lctq7kgLCAtpckHv+NAfIU8572CLG         CFnZR2hPj25z0ptKAhArfcQJ7gK9acFcYj0ua2dNzKPoBf5YPY3j1wzBTbPQuV0vTlb2         gEeVNSwWPMiw0gxpkPV5sEAjsxvLoM7C8q/yvIuwCk7gk6vXHQ3UlYMbcHo/+2BllYwI         c3EVQIO3xrdvxhhRYwJv5b64fGiJbjtdqerfjdy3fK9QECxB8Mp//XfBt9JegO2g5lcZ         voU+ug+hkdsiLV8g93shJpxLOSaViP3ENtxksSb8JQMzMkJWXiqAxlCfWVqdRGkfurf+         lo6Q==",
+            "x-google-dkim-signature": "v=1; a=rsa-sha256; c=relaxed/relaxed;        d=1e100.net; s=20230601; t=1749956827; x=1750561627;        h=to:subject:message-id:date:from:mime-version:x-gm-message-state         :from:to:cc:subject:date:message-id:reply-to;        bh=qiI3hkNi98DUxcSjTpBn6UL3SGM7Sm9AYWBcTzLKMsI=;        b=YfNEKWseDPJS0cFoJlSFbfC+DIQIbhQGMwdk/5av+RsJVYmm2TkTzFPq8OUXOUnIsH         BxIKylTr2DRW1Hjc9FO9DDT8UFgvQ5q4CrjEYS1iOk3XqbnuQ78wYCVEBwBm1Drvq3vi         B9juuChd9TRkeE8dcDURiqNrFugwOD1n/5/5C1gHK+d0IAzmj4CNNe2fQyCgpwYCWK+G         nwcwryEoB8+UV/wn1kiCbGH1WeyWHLRd/zpONUDxUHCMgeuTO3L0xo1k7pQx0YejtaVf         OYfd52L1weRctWjaCP1EogArJlZ/7d12zIOQQKoAPhiXlsPg2g7XODahhElnpIeCJFf3         Vxtw==",
+            "x-gm-message-state": "AOJu0YzKNfGSWVEKWoPPfmdZKCUVMRgBDpGGCiqNVHbCh/pKqVBkjXNw\tkkU2TQCt9lCpv2g5Hy9cV1rlaqVQywP6amDb8uv2kQ20QyV7sB5N4cbZtQUHwiPvd2Wakl18wxR\t+hvlbzBMN1YK98JKbEDjBLxwZMjR6WoFxJq23oeKQuw==",
+            "x-gm-gg": "ASbGncurdAowAKj4cw+2xLlNO/vtgGaS13ain1ezoBU6hFwTL4Z6x4Rqhd5YMsdXo0x\tsuEtKyWR8y2fHSSMb0dCoa+siFLUCH5ZYBPByRuLHsy5x8fRgnF5k+vL5PvgfojxFgpxPJuUfMW\t9uoETZjraql6ysXu4mDYLUt7LqT0eH3RRzA08apLdO3eYr",
+            "x-google-smtp-source": "AGHT+IHEu+GqGiv1rTYrRgaYqibNgwaRGUtf1UqpzPRnBfCuFSmo4uOz5N4fsH9VbT+c5lUy9muYGPlxbWDRa6Dlfqo=",
+            "x-received": "by 2002:a17:902:d547:b0:234:f6ba:e689 with SMTP id d9443c01a7336-2366b149e3emr72421775ad.39.1749956827093; Sat, 14 Jun 2025 20:07:07 -0700 (PDT)",
+            "mime-version": "1.0",
+            "x-gm-features": "AX0GCFtuOZYfnjKDWpunmj4RvYrHkhTtp9h7lja2DSl2IN2eyfQaG10YF3nkxQE",
+            "message-id": "<CABWQEnDJvqYahDyJ7BRV16CnppbKMT9hxiRjj3QNHDwEHyYpkw@mail.gmail.com>",
+            "content-type": "multipart/alternative; boundary=\"0000000000000d21a00637939336\""
+          },
+          "from": "Jeffrey Domingo <jeffreydomingo509@gmail.com>",
+          "date": "Sun, 15 Jun 2025 11:06:56 +0800",
+          "subject": "Leak",
+          "to": "propertyconnectdemo@asccreative.com"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Email Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "process_repair_request": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5c44b994-4a37-40fb-8591-67472d8b3b3f",
+  "meta": {
+    "instanceId": "6c3fc83f9f313856cb5083540ff0607fd4e98ee5c34143652ff05851a12f91a3"
+  },
+  "id": "iTKG8c4M6cUd28mr",
+  "tags": [
+    {
+      "createdAt": "2025-05-07T11:34:25.938Z",
+      "updatedAt": "2025-05-07T11:34:25.938Z",
+      "id": "0PvcoSmllIjB2XUA",
+      "name": "Ticket System"
+    }
+  ]
+}

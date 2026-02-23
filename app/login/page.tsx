@@ -1,86 +1,94 @@
-'use client';
+"use client"
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from "react"
+import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const router = useRouter();
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email && password) {
-      // Store a simple auth token in sessionStorage
-      sessionStorage.setItem('isAuthenticated', 'true');
-      sessionStorage.setItem('userEmail', email);
-      router.push('/dashboard');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError("")
+
+    console.log("Attempting login with:", email)
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    console.log("Login result:", { data, error })
+
+    if (error) {
+      console.log("Login error:", error.message)
+      setError(error.message)
+      setLoading(false)
+      return
     }
-  };
+
+    if (data.user) {
+      console.log("Login success, redirecting...")
+      window.location.href = '/dashboard'
+    } else {
+      console.log("No user in data:", data)
+      setLoading(false)
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <Card className="border-slate-700 bg-slate-800">
-          <CardHeader className="space-y-2 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">J</span>
-              </div>
-            </div>
-            <CardTitle className="text-2xl text-slate-100">JANUS</CardTitle>
-            <CardDescription className="text-slate-400">
-              Property Management System
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="email" className="text-sm font-medium text-slate-300">
-                  Email
-                </label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="user@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="password" className="text-sm font-medium text-slate-300">
-                  Password
-                </label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500"
-                  required
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Sign In
-              </Button>
-            </form>
-            <div className="mt-4 p-3 bg-slate-700 rounded-lg border border-slate-600">
-              <p className="text-xs text-slate-400">Demo credentials:</p>
-              <p className="text-sm text-slate-300 font-mono">demo@janus.com</p>
-              <p className="text-xs text-slate-400 mt-1">Any password will work for demo</p>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold text-gray-900">JANUS</h1>
+          <p className="text-gray-500 mt-1">Property Management System</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+              placeholder="••••••••"
+            />
+          </div>
+
+          {error && (
+            <p className="text-red-500 text-sm">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gray-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-700 transition disabled:opacity-50"
+          >
+            {loading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
       </div>
     </div>
-  );
+  )
 }
