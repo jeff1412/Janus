@@ -69,12 +69,15 @@ The system handles **repair requests** and **complaints** from residents/owners/
 
 ### 2.3 Database Tables (Inferred from n8n)
 
-| Table       | Key Fields |
-|------------|------------|
-| `users`    | `email`, `role` (Owner, Resident, Agent, PropertyManager), `building_id`, `name`, `suite_number` |
-| `buildings`| `id`, `building_type` (condo/rental), `property_manager_email`, `property_manager_name` |
-| `tickets`  | `ticket_id`, `state` (e.g. Completed), `building_id`, sender info, etc. |
-| `vendors`  | `email`, etc. |
+| Table          | Key Fields |
+|---------------|------------|
+| `users`       | `email`, `role` (Owner, Resident, Agent, PropertyManager), `building_id`, `name`, `suite_number` |
+| `buildings`   | `id`, `building_type` (condo/rental), `property_manager_email`, `property_manager_name` |
+| `tickets`     | `ticket_id`, `state` (e.g. Completed), `building_id`, sender info, etc. |
+| `vendors`     | `email`, etc. |
+| `ticket_messages` | `ticket_id`, `sender_email`, `sender_name`, `body`, `is_internal`, `created_at` (conversation history for each ticket) |
+| `building_rules`  | `building_id`, `ai_text`, `rule_category`, `effective_date` (AI-readable rules per building) |
+| `smtp_settings`   | `building_id`, `host`, `port`, `username`, `password`, `is_default` (Dynamic SMTP config) |
 
 **Ticket ID format:** `ticket-XXXXXXXX` (e.g. `ticket-1`, `ticket-123`)
 
@@ -109,33 +112,39 @@ Located in `documents/`:
 ```
 Janus/
 ├── app/
+│   ├── api/
+│   │   └── email-intake/
+│   │       └── route.ts         # Main intake API: receives emails, classifies with AI, creates tickets
 │   ├── page.tsx                 # Root → redirects to /login
-│   ├── layout.tsx               # Root layout
-│   ├── globals.css
+│   ├── layout.tsx               # Root layout (fonts, Vercel Analytics, global styles)
+│   ├── globals.css              # App-level styles (Tailwind)
+│   ├── hooks/
+│   │   └── useAuthUser.ts       # Client hook: loads Supabase auth user + metadata (role, building, etc.)
 │   ├── login/
-│   │   └── page.tsx             # Supabase Auth login
+│   │   └── page.tsx             # Supabase Auth login (email/password)
 │   └── dashboard/
-│       ├── layout.tsx           # Protected layout, checks auth, renders Sidebar
-│       ├── page.tsx             # Dashboard home (stats + recent tickets)
+│       ├── layout.tsx           # Protected layout, checks auth, renders Sidebar, listens for auth changes
+│       ├── page.tsx             # Dashboard home (ticket stats + recent tickets from Supabase)
 │       ├── tickets/
-│       │   ├── page.tsx         # Tickets list with filters
-│       │   └── [id]/page.tsx    # Ticket detail + conversation
-│       ├── buildings/page.tsx   # Buildings list
-│       ├── vendors/page.tsx     # Vendors list
-│       └── admin/page.tsx       # Users + Buildings admin tabs
+│       │   ├── page.tsx         # Tickets list with status/urgency/type filters (Supabase-backed)
+│       │   ├── new/page.tsx     # New ticket form (inserts into Supabase `tickets`)
+│       │   └── [id]/page.tsx    # Ticket detail + conversation + vendor assignment (all Supabase-backed)
+│       ├── buildings/page.tsx   # Buildings list (mock data from `lib/mock-data.ts`)
+│       ├── vendors/page.tsx     # Vendors list (mock vendors from `lib/mock-data.ts`)
+│       └── admin/page.tsx       # Users + Buildings admin tabs (Supabase `users` + `buildings`)
 ├── components/
-│   ├── sidebar.tsx              # Main nav (Dashboard, Tickets, Buildings, Vendors, Admin)
+│   ├── sidebar.tsx              # Main nav (Dashboard, Tickets, Buildings, Vendors, Admin) + logout
 │   ├── theme-provider.tsx
-│   └── ui/                     # shadcn components
+│   └── ui/                      # shadcn/ui primitives (button, card, input, tabs, etc.)
 ├── lib/
-│   ├── supabase.ts             # Supabase client
-│   ├── mock-data.ts            # Mock users, buildings, tickets (used by UI)
+│   ├── supabase.ts              # Supabase client (browser, persisted session)
+│   ├── mock-data.ts             # Mock users, buildings, tickets (used by some UI pages)
 │   └── utils.ts
 ├── types/
-│   └── index.ts                # TypeScript interfaces (Building, User, Ticket, etc.)
-├── documents/                  # n8n workflows + docs
-├── middleware.disabled.ts      # Middleware for protected routes (currently disabled)
-└── CONTEXT.md                  # This file
+│   └── index.ts                 # TypeScript domain/interfaces (Building, User, Ticket, TicketMessage, etc.)
+├── documents/                   # n8n workflows + docs
+├── middleware.disabled.ts       # Middleware for protected routes (currently disabled)
+└── CONTEXT.md                   # This file
 ```
 
 ---
@@ -146,12 +155,16 @@ Janus/
 
 - `BuildingType`: `'condo' | 'rental' | 'housing-co-op'`
 - `UserRole`: `'Resident' | 'Owner' | 'Agent' | 'PropertyManager'`
-- `TicketType`: `'repair' | 'complaint' | 'Self-Help' | 'general'`
-- `TicketState`: `'new' | 'in-progress' | 'completed' | 'escalated' | 'pending-approval'`
+- `TicketType`: `'repair' | 'complaint' | 'condo_reject' | 'general_inquiries_or_redesign'`
+- `TicketState`: `'new' | 'in-progress' | 'completed' | 'pending-approval'`
 - `TicketUrgency`: `'low' | 'medium' | 'high'`
 - `VendorType`: `'vendor' | 'contractor'`
 
-**Interfaces:** `Building`, `User`, `Vendor`, `Ticket`, `BuildingRule`, `AuthUser`
+**Interfaces:** `Building`, `User`, `Vendor`, `Ticket`, `TicketMessage`, `BuildingRule`, `AuthUser`
+
+- `TicketMessage` maps to the `ticket_messages` table (per-ticket conversation history, including `is_internal` notes).
+- `BuildingRule` maps to a `building_rules` table (AI-readable building rules and categories).
+- `AuthUser` represents the authenticated Supabase user + basic profile/role fields used by the app.
 
 **Note:** `lib/mock-data.ts` uses different types (`admin`, `staff`, `vendor` roles; `TicketStatus`, `Urgency`) — these are for mock data only. Real Supabase data should align with `types/index.ts`.
 
@@ -181,24 +194,33 @@ Janus/
 |------|--------|
 | Replace login page with Supabase Auth | ✅ Done (`supabase.auth.signInWithPassword`) |
 | Add middleware for protected routes | ⭕ Not done (middleware disabled) |
-| Add role detection + redirect based on role | ⭕ Not done |
+| Add role detection + redirect based on role | ⭕ Partially done (role stored in Supabase user metadata and read via `useAuthUser`, but no per-role redirects yet) |
 
 ### Phase 4 — Real Data in Pages
 
 | Item | Status |
 |------|--------|
-| Dashboard real ticket counts | ⭕ Mock data |
-| Tickets list page real tickets | ⭕ Mock data |
-| Ticket detail page real ticket + history | ⭕ Mock data |
-| Admin page real buildings + users | ⭕ Mock data |
+| Dashboard real ticket counts | ✅ Done (Supabase `tickets` table) |
+| Tickets list page real tickets | ✅ Done (Supabase `tickets` table + filters) |
+| Ticket detail page real ticket + history | ✅ Done (ticket from Supabase `tickets`; conversation from `ticket_messages`; managers can change state and assign vendors from `vendors`) |
+| Admin page real buildings + users | ✅ Done (Supabase `users` + `buildings` tables) |
 
 ### Phase 5 — Ticket Submission
 
 | Item | Status |
 |------|--------|
-| New Ticket form + insert into Supabase | ⭕ Not done |
+| New Ticket form + insert into Supabase | ✅ Done (`/dashboard/tickets/new` inserts into `tickets`) |
 
-**Summary:** Basic Supabase login + protected dashboard via layout is working. Middleware, role-based redirects, and all real-data pages (Phases 4–5) are still ahead.
+### Phase 6 — Email Intake & Automation
+
+| Item | Status |
+|------|--------|
+| Email intake API (`/api/email-intake`) | ✅ Done (AI classification + initial message) |
+| Multi-vendor auto-assignment | ✅ Done (based on category + building) |
+| Dynamic SMTP Configuration | ✅ Done (Admin UI + `smtp_settings` table) |
+| Real SMTP Notification Delivery | 🟡 In Progress |
+
+**Summary:** Basic Supabase login + protected dashboard is working. The email intake motor is functional with AI classification and dynamic SMTP routing. Next major focus is the transition to live email triggers and multi-tenant company hierarchy.
 
 ---
 
@@ -206,8 +228,8 @@ Janus/
 
 1. **Root (`/`)** → Redirects to `/login`
 2. **Login (`/login`)** → Form calls `supabase.auth.signInWithPassword()` → On success, `window.location.href = '/dashboard'`
-3. **Dashboard layout** → `useEffect` checks `supabase.auth.getSession()`; if no session → redirect to `/login`
-4. **Logout** (Sidebar) → Currently clears `sessionStorage` and redirects; should be updated to call `supabase.auth.signOut()` for proper Supabase logout
+3. **Dashboard layout** → `useEffect` checks `supabase.auth.getSession()`; if no session → redirect to `/login`. Also subscribes to `supabase.auth.onAuthStateChange()` to redirect if the user signs out or the session is lost.
+4. **Logout** (Sidebar) → Calls `supabase.auth.signOut()` and then redirects to `/login`
 
 **Middleware:** `middleware.disabled.ts` exists with cookie-based session check but is **disabled** (file renamed). When re-enabled, it would protect routes server-side.
 
@@ -220,12 +242,15 @@ Janus/
 | `lib/supabase.ts` | Supabase client; uses `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
 | `app/login/page.tsx` | Login form, Supabase Auth |
 | `app/dashboard/layout.tsx` | Auth check, Sidebar, wraps all dashboard pages |
-| `app/dashboard/page.tsx` | Stats cards + recent tickets (mock) |
-| `app/dashboard/tickets/page.tsx` | Ticket list with status/urgency filters (mock) |
-| `app/dashboard/tickets/[id]/page.tsx` | Ticket detail + conversation thread (mock) |
-| `app/dashboard/buildings/page.tsx` | Buildings grid (mock) |
-| `app/dashboard/vendors/page.tsx` | Vendors list (mock) |
-| `app/dashboard/admin/page.tsx` | Users + Buildings tabs (mock) |
+| `app/dashboard/page.tsx` | Stats cards + recent tickets (Supabase `tickets`) |
+| `app/dashboard/tickets/page.tsx` | Ticket list with status/urgency filters (Supabase `tickets`) |
+| `app/dashboard/tickets/new/page.tsx` | New ticket form that inserts into Supabase `tickets` |
+| `app/dashboard/tickets/[id]/page.tsx` | Ticket detail + Supabase-backed conversation thread (`ticket_messages`) and vendor assignment (`vendors`) |
+| `app/dashboard/buildings/page.tsx` | Buildings grid (mock data from `lib/mock-data.ts`) |
+| `app/dashboard/vendors/page.tsx` | Vendors list (mock users filtered as vendors from `lib/mock-data.ts`) |
+| `app/dashboard/admin/page.tsx` | Users + Buildings + SMTP Settings tabs |
+| `app/api/email-intake/route.ts` | AI Triage + Ticket Creation + Dynamic Notifications |
+| `app/hooks/useAuthUser.ts` | Client hook that loads the authenticated Supabase user as an `AuthUser` (including `role`) |
 | `components/sidebar.tsx` | Nav links; logout handler |
 | `lib/mock-data.ts` | Mock users, buildings, tickets |
 
@@ -244,7 +269,7 @@ Janus/
 - `/dashboard/vendors` → Vendors
 - `/dashboard/admin` → Admin (users + buildings)
 
-**Sidebar hrefs:** Currently use `/tickets`, `/buildings`, `/vendors`, `/admin`. These may need to be updated to `/dashboard/tickets`, `/dashboard/buildings`, etc., depending on whether the dashboard layout is the parent. With the current structure, all dashboard pages are under `/dashboard/*`, so sidebar links should be `/dashboard/tickets`, `/dashboard/buildings`, `/dashboard/vendors`, `/dashboard/admin`.
+**Sidebar hrefs:** Use `/dashboard`, `/dashboard/tickets`, `/dashboard/buildings`, `/dashboard/vendors`, `/dashboard/admin`, matching the App Router structure. Active state is based on `usePathname()` and `startsWith(href)` for non-root dashboard links.
 
 ---
 
@@ -270,12 +295,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 
 ## 13. Next Steps (Suggested)
 
-1. Re-enable and fix middleware for protected routes
-2. Add role detection after login; redirect by role (e.g. PropertyManager → dashboard, Resident → limited view)
-3. Replace mock data with Supabase queries in dashboard, tickets, buildings, admin pages
-4. Implement New Ticket form with Supabase insert
-5. Align Sidebar logout with `supabase.auth.signOut()`
-6. Fix Sidebar nav links to use correct `/dashboard/*` paths if needed
+1. Re-enable and fix middleware for protected routes so auth is enforced server-side (in addition to the client-side dashboard layout check).
+2. Finish role-based behavior: use `useAuthUser` / Supabase user metadata to redirect by role and gate features (e.g. only PropertyManagers can assign vendors or change ticket state).
+3. Replace remaining mock data in `buildings` and `vendors` pages with Supabase-backed tables and CRUD flows.
+4. Integrate n8n workflows so email replies and automation steps write into the `ticket_messages` table, keeping the in-app conversation thread in sync with email.
+5. Add basic admin UIs for creating/editing/deleting buildings, users, and vendors behind the Admin tab.
 
 ---
 

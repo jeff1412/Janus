@@ -2,13 +2,16 @@ export type BuildingType = 'condo' | 'rental' | 'housing-co-op'
 
 export type UserRole = 'Resident' | 'Owner' | 'Agent' | 'PropertyManager'
 
-export type TicketType = 'repair' | 'complaint' | 'Self-Help' | 'general'
+export type TicketType =
+  | 'repair'
+  | 'complaint'
+  | 'condo_reject'
+  | 'general_inquiries_or_redesign'
 
 export type TicketState =
   | 'new'
   | 'in-progress'
   | 'completed'
-  | 'escalated'
   | 'pending-approval'
 
 export type TicketUrgency = 'low' | 'medium' | 'high'
@@ -57,12 +60,29 @@ export interface Ticket {
   damage_description: string | null
   state: TicketState
   resident: string | null
+  resident_name?: string | null        // NEW in type (already exists in DB)
+  building: string | null
   building_id: number | null
+  unit_number: string | null
   conversation_history: string | null
   attachments: string | null
+  subject: string | null
+  sender_email: string | null
+  assigned_vendor_id: number | null
+  estimated_cost?: number | null       // NEW in type (already exists in DB)
   created_at: string
   updated_at: string
-  building?: Building
+}
+
+export interface TicketMessage {
+  id: string
+  ticket_id: string
+  sender_email: string | null
+  sender_name: string | null
+  body: string
+  attachments: object[] | null
+  is_internal: boolean
+  created_at: string
 }
 
 export interface BuildingRule {
@@ -74,7 +94,6 @@ export interface BuildingRule {
   created_at: string
 }
 
-// Auth context type
 export interface AuthUser {
   id: string
   email: string

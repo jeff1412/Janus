@@ -6,32 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ChevronRight, Filter } from 'lucide-react';
-
-type TicketStatus =
-  | 'new'
-  | 'in-progress'
-  | 'completed'
-  | 'escalated'
-  | 'pending-approval';
-type Urgency = 'low' | 'medium' | 'high';
-
-interface Ticket {
-  id: string;
-  ticket_id: string;
-  state: TicketStatus;
-  type: string | null;
-  urgency: Urgency | null;
-  building: string | null;
-  unit_number: string | null;
-  created_at: string;
-  assignedTo?: string | null;
-}
+import type { Ticket, TicketState, TicketUrgency, TicketType } from '@/types';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all');
-  const [urgencyFilter, setUrgencyFilter] = useState<Urgency | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<TicketState | 'all'>('all');
+  const [urgencyFilter, setUrgencyFilter] = useState<TicketUrgency | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<TicketType | 'all'>('all');
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -54,12 +36,12 @@ export default function TicketsPage() {
 
   const filteredTickets = tickets.filter((ticket) => {
     const statusMatch = statusFilter === 'all' || ticket.state === statusFilter;
-    const urgencyMatch =
-      urgencyFilter === 'all' || ticket.urgency === urgencyFilter;
-    return statusMatch && urgencyMatch;
+    const urgencyMatch = urgencyFilter === 'all' || ticket.urgency === urgencyFilter;
+    const typeMatch = typeFilter === 'all' || ticket.type === typeFilter;
+    return statusMatch && urgencyMatch && typeMatch;
   });
 
-  const getStatusColor = (status: TicketStatus) => {
+  const getStatusColor = (status: TicketState) => {
     switch (status) {
       case 'new':
         return 'bg-blue-50 text-blue-600 border-blue-200';
@@ -67,12 +49,29 @@ export default function TicketsPage() {
         return 'bg-amber-50 text-amber-600 border-amber-200';
       case 'completed':
         return 'bg-green-50 text-green-600 border-green-200';
+      case 'pending-approval':
+        return 'bg-purple-50 text-purple-600 border-purple-200';
       default:
         return 'bg-slate-50 text-slate-500 border-slate-200';
     }
   };
 
-  const getUrgencyColor = (urgency: Urgency) => {
+  const getStatusLabel = (status: TicketState) => {
+    switch (status) {
+      case 'new':
+        return 'New';
+      case 'in-progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'pending-approval':
+        return 'Pending Approval';
+      default:
+        return status;
+    }
+  };
+
+  const getUrgencyColor = (urgency: TicketUrgency) => {
     switch (urgency) {
       case 'high':
         return 'bg-red-50 text-red-600 border-red-200';
@@ -80,6 +79,32 @@ export default function TicketsPage() {
         return 'bg-amber-50 text-amber-600 border-amber-200';
       case 'low':
         return 'bg-green-50 text-green-600 border-green-200';
+    }
+  };
+
+  const getTypeColor = (type: TicketType) => {
+    switch (type) {
+      case 'repair':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'complaint':
+        return 'bg-red-50 text-red-700 border-red-200';
+      case 'condo_reject':
+        return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'general_inquiries_or_redesign':
+        return 'bg-slate-50 text-slate-600 border-slate-200';
+    }
+  };
+
+  const getTypeLabel = (type: TicketType) => {
+    switch (type) {
+      case 'repair':
+        return 'Repair';
+      case 'complaint':
+        return 'Complaint';
+      case 'condo_reject':
+        return 'Owner Responsibility';
+      case 'general_inquiries_or_redesign':
+        return 'General Inquiry';
     }
   };
 
@@ -93,7 +118,6 @@ export default function TicketsPage() {
             Manage maintenance and support requests
           </p>
         </div>
-        {/* New Ticket button with mint leaf color */}
         <Link href="/dashboard/tickets/new">
           <Button className="bg-[#3EB489] hover:bg-[#36a27b] text-white shadow-sm hover:shadow-md">
             New Ticket
@@ -110,41 +134,42 @@ export default function TicketsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Status Filter */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-3">
                 Status
               </label>
               <div className="flex flex-wrap gap-2">
-                {['all', 'new', 'in-progress', 'completed'].map((status) => (
-                  <Button
-                    key={status}
-                    onClick={() => setStatusFilter(status as any)}
-                    variant={statusFilter === status ? 'default' : 'outline'}
-                    className={`text-sm ${
-                      statusFilter === status
-                        ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
-                        : 'border-slate-300 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    {status === 'all'
-                      ? 'All'
-                      : status === 'in-progress'
-                      ? 'In Progress'
-                      : status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Button>
-                ))}
+                {(['all', 'new', 'in-progress', 'completed', 'pending-approval'] as const).map(
+                  (status) => (
+                    <Button
+                      key={status}
+                      onClick={() => setStatusFilter(status)}
+                      variant={statusFilter === status ? 'default' : 'outline'}
+                      className={`text-sm ${
+                        statusFilter === status
+                          ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
+                          : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {status === 'all' ? 'All' : getStatusLabel(status as TicketState)}
+                    </Button>
+                  ),
+                )}
               </div>
             </div>
+
+            {/* Urgency Filter */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-3">
                 Urgency
               </label>
               <div className="flex flex-wrap gap-2">
-                {['all', 'high', 'medium', 'low'].map((urgency) => (
+                {(['all', 'high', 'medium', 'low'] as const).map((urgency) => (
                   <Button
                     key={urgency}
-                    onClick={() => setUrgencyFilter(urgency as any)}
+                    onClick={() => setUrgencyFilter(urgency)}
                     variant={urgencyFilter === urgency ? 'default' : 'outline'}
                     className={`text-sm ${
                       urgencyFilter === urgency
@@ -155,6 +180,37 @@ export default function TicketsPage() {
                     {urgency === 'all'
                       ? 'All'
                       : urgency.charAt(0).toUpperCase() + urgency.slice(1)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Type Filter */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-3">
+                Type
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    'all',
+                    'repair',
+                    'complaint',
+                    'condo_reject',
+                    'general_inquiries_or_redesign',
+                  ] as const
+                ).map((type) => (
+                  <Button
+                    key={type}
+                    onClick={() => setTypeFilter(type)}
+                    variant={typeFilter === type ? 'default' : 'outline'}
+                    className={`text-sm ${
+                      typeFilter === type
+                        ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
+                        : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {type === 'all' ? 'All' : getTypeLabel(type as TicketType)}
                   </Button>
                 ))}
               </div>
@@ -189,38 +245,61 @@ export default function TicketsPage() {
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-3">
-                        <h3 className="font-semibold text-slate-900 truncate text-balance">
-                          {ticket.type ?? 'Ticket'}
+                      <div className="flex items-center gap-3 mb-3 flex-wrap">
+                        <h3 className="font-semibold text-slate-900 truncate">
+                          {ticket.subject ??
+                            ticket.damage_description ??
+                            'Untitled Ticket'}
                         </h3>
+                        {ticket.type && (
+                          <span
+                            className={`flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium border ${getTypeColor(
+                              ticket.type,
+                            )}`}
+                          >
+                            {getTypeLabel(ticket.type)}
+                          </span>
+                        )}
                         <span
                           className={`flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium border ${getStatusColor(
-                            ticket.state
+                            ticket.state,
                           )}`}
                         >
-                          {ticket.state === 'new'
-                            ? 'New'
-                            : ticket.state === 'in-progress'
-                            ? 'In Progress'
-                            : 'Completed'}
+                          {getStatusLabel(ticket.state)}
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-4 text-sm text-slate-600">
                         <span>{ticket.ticket_id}</span>
                         <span>
-                          {(ticket.building ?? 'Unknown building')} • Unit{' '}
+                          {ticket.building ?? 'Unknown building'} • Unit{' '}
                           {ticket.unit_number ?? '—'}
                         </span>
                         <span>
-                          Assigned to: {ticket.assignedTo || 'Unassigned'}
+                          {ticket.resident_name ??
+                            ticket.resident ??
+                            ticket.sender_email ??
+                            'Unknown resident'}
                         </span>
+                        {ticket.estimated_cost != null && (
+                          <span>
+                            Est. cost:{' '}
+                            ₱
+                            {Number(ticket.estimated_cost).toLocaleString(
+                              'en-PH',
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex-shrink-0 flex flex-col items-end gap-3">
                       {ticket.urgency && (
                         <span
                           className={`text-xs px-2 py-1 rounded-full font-medium border ${getUrgencyColor(
-                            ticket.urgency
+                            ticket.urgency,
                           )}`}
                         >
                           {ticket.urgency.charAt(0).toUpperCase() +
