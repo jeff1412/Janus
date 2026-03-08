@@ -142,9 +142,12 @@ Janus/
 │   └── utils.ts
 ├── types/
 │   └── index.ts                 # TypeScript domain/interfaces (Building, User, Ticket, TicketMessage, etc.)
-├── documents/                   # n8n workflows + docs
-├── middleware.disabled.ts       # Middleware for protected routes (currently disabled)
-└── CONTEXT.md                   # This file
+├── scripts/                     # Backend automation and utility scripts
+│   ├── email-listener.js        # REAL-TIME LISTENER: Pulls IMAP settings from Supabase and monitors inbox
+│   ├── load-env.js              # Shared environment loader for scripts
+│   └── (various helpers)        # check-ticket.js, list-tickets.js, debug-notifications.js, etc.
+├── CONTEXT.md                   # This file
+└── TASKLIST.md                  # Current project roadmap
 ```
 
 ---
@@ -218,9 +221,12 @@ Janus/
 | Email intake API (`/api/email-intake`) | ✅ Done (AI classification + initial message) |
 | Multi-vendor auto-assignment | ✅ Done (based on category + building) |
 | Dynamic SMTP Configuration | ✅ Done (Admin UI + `smtp_settings` table) |
-| Real SMTP Notification Delivery | 🟡 In Progress |
+| Real-time Email Listener (`email-listener.js`) | ✅ Done (IMAP-based auto-ingestion) |
+| Message Deduplication & Threads | ✅ Done (History cleaning + Ticket ID extraction) |
+| Sender Verification | ✅ Done (Only known residents can create tickets) |
+| Real SMTP Notification Delivery | ✅ Done (Dynamic delivery via Supabase settings) |
 
-**Summary:** Basic Supabase login + protected dashboard is working. The email intake motor is functional with AI classification and dynamic SMTP routing. Next major focus is the transition to live email triggers and multi-tenant company hierarchy.
+**Summary:** The system is now fully automated. A real-time listener monitors the inbox (via Supabase settings), ingests emails into the AI triage route, creates tickets for known residents, and automatically notifies the PM, Vendor, and Resident using dynamic SMTP credentials.
 
 ---
 
@@ -249,10 +255,10 @@ Janus/
 | `app/dashboard/buildings/page.tsx` | Buildings grid (mock data from `lib/mock-data.ts`) |
 | `app/dashboard/vendors/page.tsx` | Vendors list (mock users filtered as vendors from `lib/mock-data.ts`) |
 | `app/dashboard/admin/page.tsx` | Users + Buildings + SMTP Settings tabs |
-| `app/api/email-intake/route.ts` | AI Triage + Ticket Creation + Dynamic Notifications |
-| `app/hooks/useAuthUser.ts` | Client hook that loads the authenticated Supabase user as an `AuthUser` (including `role`) |
-| `components/sidebar.tsx` | Nav links; logout handler |
-| `lib/mock-data.ts` | Mock users, buildings, tickets |
+| `app/api/email-intake/route.ts` | AI Triage + Ticket Creation + Dynamic Notifications + Sender Verification |
+| `scripts/email-listener.js` | Standalone script that connects to IMAP and triggers the intake API |
+| `lib/ai/geminiEmailTriage.ts` | AI classification logic using Google Gemini |
+| `lib/mailer.ts` | Shared notification delivery logic |
 
 ---
 
@@ -280,6 +286,13 @@ Required in `.env.local`:
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+GEMINI_API_KEY=AIzaSy...
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM="JANUS <your-email@gmail.com>"
 ```
 
 ---

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
                         const parsed = await simpleParser(message.source);
                         const fromEmail = parsed.from?.value[0]?.address;
                         const subject = parsed.subject || '(No Subject)';
-                        const bodyText = parsed.text || '(No Body)';
+                        const bodyText = (parsed.text || '').trim() || parsed.textAsHtml || parsed.html || '(No Body)';
 
                         if (fromEmail) {
                             const result = await processEmail({

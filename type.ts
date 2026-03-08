@@ -12,7 +12,8 @@ export type TicketType =
   | 'repair'
   | 'complaint'
   | 'condo_reject'
-  | 'general_inquiries_or_redesign';
+  | 'general_inquiries_or_redesign'
+  | 'self_help';
 
 export type Ticket = {
   id: string;

@@ -2,7 +2,8 @@ export type TicketType =
   | 'repair'
   | 'complaint'
   | 'condo_reject'
-  | 'general_inquiries_or_redesign';
+  | 'general_inquiries_or_redesign'
+  | 'self_help';
 
 export type TicketUrgency = 'high' | 'medium' | 'low';
 
@@ -14,6 +15,7 @@ export type RepairCategory =
   | 'hvac'
   | 'appliance'
   | 'structural'
+  | 'construction'
   | 'pest'
   | 'other'
   | null;
@@ -26,63 +28,105 @@ export type GeminiTriageResult =
   | {
     is_relevant: true;
     reason: string;
-    type: TicketType;
-    urgency: TicketUrgency;
-    status: TicketStatus;
+    type: TicketType | null;
+    urgency: TicketUrgency | null;
+    status: TicketStatus | null;
     estimated_cost: number | null;
     repair_category: RepairCategory;
     resident_name: string | null;
     building_name: string | null;
     unit_number: string | null;
     summary: string;
+    is_follow_up: boolean;
+    ticket_id: string | null;
+    is_self_help: boolean;
+    is_self_help_failed?: boolean;
   };
 
 export const GEMINI_TRIAGE_PROMPT = `
 You are an assistant for JANUS, a property management platform.
 
-Your task is to analyze an incoming email and triage it. 
+Your task is to analyze an incoming email and determine if it is:
+1. A NEW request (repair, complaint, etc.)
+2. A FOLLOW-UP to an existing open ticket.
 
 CRITICAL: 
-- Emails often contain historical conversation threads (lines starting with > or containing "From: ... Sent: ..."), signatures, and "Sent from my iPhone" noise. 
-- You MUST focus ONLY on the LATEST message (the newest content at the top).
-- IGNORE previous replies, historical threads, and legal disclaimers/signatures.
-- If the latest content is just a short follow-up like "Thanks" or "Okay" but refers to an existing issue discussed in the thread, classify it based on the context of the newest information.
+- Emails often contain historical conversation threads. Focus ONLY on the LATEST message at the top.
+- IGNORE historical threads and signatures.
 
+---
+SCENARIO A: NEW REQUEST
+If the email is about a new maintenance issue, complaint, or inquiry:
+- "is_relevant": true
+- "is_follow_up": false
+- "ticket_id": null
+
+SCENARIO B: FOLLOW-UP TO EXISTING TICKET
+You will be provided with a list of "Existing Open Tickets" for this resident/building (if any).
+If the latest email message is clearly a follow-up, update, or question about one of those open tickets, OR if it reports the EXACT SAME ISSUE (same request) that is already in an open ticket:
+- "is_relevant": true
+- "is_follow_up": true
+- "ticket_id": "the_matching_ticket_id" (e.g. ticket-1741163123456)
+- MATCH BY TOPIC: If the email is about a different topic or a DIFFERENT CATEGORY (e.g. "Bulb replacement" is Electrical, "Air condition" is HVAC), it is NOT a follow-up. Create a NEW ticket (Scenario A).
+- PREVENT DUPLICATES: Only treat as follow-up if it's the exact same issue reported again.
+
+TICKET LIFECYCLE (STATUS UPDATES):
+Based on the text and the SENDER TYPE (will be provided in context), you must update the "status" field:
+
+1. VENDOR SENDER:
+   - If the vendor ACCEPTED the task, confirmed they will do it, or scheduled it: Set "status" to "in-progress".
+   - If the vendor reports the JOB IS DONE or completed: You can keep it as "in-progress" or "pending-approval" (JANUS logic handles final completion).
+
+2. RESIDENT SENDER:
+   - If the resident reports the JOB IS DONE, fixed, or confirms completion (especially after trying "self_help" instructions): You MUST set "status" to "completed".
+
+---
 JANUS handles ONLY:
-- Building maintenance and repairs (plumbing, electrical, HVAC, appliances, structural, pest, etc.).
-- Resident complaints about the building, staff, neighbours, or services.
-- Condo application rejections or issues related to condo board decisions.
-- General inquiries or redesign questions related to the building or units.
+- Building maintenance/repairs, complaints, condo rejections, and general building inquiries.
 
-If the email is NOT about these topics (for example: spam, marketing, unrelated personal matters, job applications, sales pitches, newsletters, etc.):
-- You MUST return JSON with ONLY:
-  {
-    "is_relevant": false,
-    "reason": "Short explanation why this email is not about maintenance/complaints/resident services."
-  }
+If the email is NOT relevant:
+- return {"is_relevant": false, "reason": "..."}
 
-If the email IS about JANUS services, return JSON with:
+If relevant, return JSON:
 {
   "is_relevant": true,
-  "reason": "Short explanation of why this is relevant.",
-  "type": "repair | complaint | condo_reject | general_inquiries_or_redesign",
-  "urgency": "high | medium | low",
-  "status": "new | in-progress | pending-approval | completed",
+  "is_follow_up": boolean,
+  "ticket_id": "ticket-XXXXXXXX" or null,
+  "reason": "Short explanation",
+  "type": "repair | complaint | condo_reject | general_inquiries_or_redesign | self_help | null",
+  "urgency": "high | medium | low | null",
+  "status": "new | in-progress | pending-approval | completed | null",
+  "repair_category": "electrical | plumbing | hvac | appliance | structural | construction | pest | other | null",
+  "summary": "1–2 sentence summary of the issue",
+  "resident_name": "string | null",
+  "building_name": "string | null",
+  "unit_number": "string | null",
   "estimated_cost": number or null,
-  "repair_category": "electrical | plumbing | hvac | appliance | structural | pest | other | null",
-  "resident_name": "Full resident name or null",
-  "building_name": "Building name or null",
-  "unit_number": "Unit or suite number or null",
-  "summary": "1–2 sentence summary of the issue"
+  "is_self_help": boolean,
+  "is_self_help_failed": boolean or null
 }
 
 Rules:
-- Always respond with STRICT, valid JSON only. No extra text.
-- Choose "repair" if the resident is asking for something to be fixed, replaced, inspected, or installed.
-- Choose "complaint" for noise issues, neighbour issues, staff issues, cleanliness, service complaints, etc.
-- Choose "condo_reject" when the email is about a condo board rejecting an application or decision.
-- Choose "general_inquiries_or_redesign" for questions, information requests, or design/redesign related topics.
-- Use "urgency" = "high" only if there is risk of damage, safety, water leaks, no power, no heat in winter, etc.
-- If you are unsure of estimated_cost, use null.
-- If name/building/unit are not clearly given, use null.
+- If is_follow_up is true, ticket_id MUST be one of the IDs provided in the "Existing Open Tickets" list.
+- If it's a follow-up, you can leave type/urgency/status as null or guess them based on the new message.
+- SELF-HELP RULES:
+  * "is_self_help": Set to true ONLY for simple, safe maintenance tasks that a resident can perform without professional training or dangerous tools. 
+    EXAMPLES: Changing a standard lightbulb, replacing a battery in a smoke detector, tightening a loose door handle/knob, using a plunger on a minor sink/toilet clog, or cleaning a surface-level drain.
+    DO NOT mark as self-help if it involves: High-voltage electrical wiring, plumbing leaks inside walls, structural repairs, or anything requiring a ladder taller than 3 steps.
+    DO NOT mark as self-help if the resident explicitly asks for a "professional", "vendor", or indicates they have already tried and failed.
+    If is_self_help is true, you MUST set "type" to "self_help" and "estimated_cost" to 0.
+  * "is_self_help_failed": Set to true if this is a follow-up email from the resident about an existing "self_help" ticket, and they clearly state they:
+    - Ruined or messed up the job.
+    - Don't have the necessary equipment, tools, or parts.
+    - Don't have the time to do it or buy the parts.
+    - Explicitly ask for a professional to take over because they changed their mind.
+- CATEGORY MAPPING RULES:
+  * "electrical": Electrical problems, faulty line wire, changing bulbs, wiring, power issues.
+  * "plumbing": Leaking pipes, water line, faucet, shower, clogged pipelines, water drainage.
+  * "hvac": Air condition, air conditioning, cool/cold air, AC leaks, not blowing cold air, refrigeration, freezers.
+  * "construction": Renovation, creating furniture, building updates.
+  * "structural": Walls, floors, or core building structure.
+- CRITICAL FOR CONSTRUCTION: If category is "construction", you MUST set "estimated_cost" to null AND set "status" to "pending-approval".
+- CRITICAL: Never pick "other" if the issue fits any of the above. You MUST pick a specific category so a vendor can be auto-assigned.
+- Always respond with STRICT, valid JSON only.
 `;

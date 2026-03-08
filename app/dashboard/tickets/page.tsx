@@ -147,11 +147,10 @@ export default function TicketsPage() {
                       key={status}
                       onClick={() => setStatusFilter(status)}
                       variant={statusFilter === status ? 'default' : 'outline'}
-                      className={`text-sm ${
-                        statusFilter === status
+                      className={`text-sm ${statusFilter === status
                           ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
                           : 'border-slate-300 text-slate-700 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       {status === 'all' ? 'All' : getStatusLabel(status as TicketState)}
                     </Button>
@@ -171,11 +170,10 @@ export default function TicketsPage() {
                     key={urgency}
                     onClick={() => setUrgencyFilter(urgency)}
                     variant={urgencyFilter === urgency ? 'default' : 'outline'}
-                    className={`text-sm ${
-                      urgencyFilter === urgency
+                    className={`text-sm ${urgencyFilter === urgency
                         ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
                         : 'border-slate-300 text-slate-700 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     {urgency === 'all'
                       ? 'All'
@@ -204,11 +202,10 @@ export default function TicketsPage() {
                     key={type}
                     onClick={() => setTypeFilter(type)}
                     variant={typeFilter === type ? 'default' : 'outline'}
-                    className={`text-sm ${
-                      typeFilter === type
+                    className={`text-sm ${typeFilter === type
                         ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
                         : 'border-slate-300 text-slate-700 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     {type === 'all' ? 'All' : getTypeLabel(type as TicketType)}
                   </Button>

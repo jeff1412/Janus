@@ -14,3 +14,10 @@ janus-email-sync/
 scripts/tickets-output.json
 *.json.log
 *.log
+
+# Temporary debug files
+tmp_*.js
+tmp/
+*.txt
+tsconfig.tsbuildinfo
+.email-listener.lock

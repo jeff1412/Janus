@@ -234,9 +234,8 @@ export default function TicketDetailPage() {
       ticket_id: routeId,
       sender_name: 'System',
       sender_email: 'system@janus',
-      body: `System: PM reassigned vendor from ${
-        previousVendor ? previousVendor.company_name : 'None'
-      } to ${newVendor ? newVendor.company_name : 'None'}.`,
+      body: `System: PM reassigned vendor from ${previousVendor ? previousVendor.company_name : 'None'
+        } to ${newVendor ? newVendor.company_name : 'None'}.`,
       is_internal: true,
     });
 
@@ -450,9 +449,8 @@ export default function TicketDetailPage() {
         ticket_id: routeId,
         sender_name: 'System',
         sender_email: 'system@janus',
-        body: `System: PM changed estimated cost from ${
-          previousEstimate != null ? `$${previousEstimate}` : 'none'
-        } to ${newEstimate != null ? `$${newEstimate}` : 'none'}.`,
+        body: `System: PM changed estimated cost from ${previousEstimate != null ? `$${previousEstimate}` : 'none'
+          } to ${newEstimate != null ? `$${newEstimate}` : 'none'}.`,
         is_internal: true,
       });
 
@@ -619,11 +617,10 @@ export default function TicketDetailPage() {
                   {messages.map((message) => (
                     <div
                       key={message.id}
-                      className={`flex gap-3 p-3 rounded-lg ${
-                        message.is_internal
+                      className={`flex gap-3 p-3 rounded-lg ${message.is_internal
                           ? 'bg-amber-50 border border-amber-200'
                           : 'bg-slate-50 border border-slate-200'
-                      }`}
+                        }`}
                     >
                       <div className="flex-shrink-0">
                         <div className="w-8 h-8 rounded-full bg-[#3EB489] flex items-center justify-center">
@@ -673,11 +670,10 @@ export default function TicketDetailPage() {
                     <button
                       type="button"
                       onClick={() => setIsInternal(!isInternal)}
-                      className={`flex items-center gap-2 text-sm px-3 py-1 rounded-full border transition-colors ${
-                        isInternal
+                      className={`flex items-center gap-2 text-sm px-3 py-1 rounded-full border transition-colors ${isInternal
                           ? 'bg-amber-50 text-amber-700 border-amber-300'
                           : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       <Lock className="w-3 h-3" />
                       {isInternal ? 'Internal Note' : 'Mark as Internal Note'}
@@ -833,11 +829,10 @@ export default function TicketDetailPage() {
                     onClick={() => handleStateChange(s)}
                     disabled={updatingState || ticket.state === s}
                     variant={ticket.state === s ? 'default' : 'outline'}
-                    className={`w-full text-sm ${
-                      ticket.state === s
+                    className={`w-full text-sm ${ticket.state === s
                         ? 'bg-[#3EB489] hover:bg-[#36a27b] text-white'
                         : 'border-slate-300 text-slate-700 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     {getStatusLabel(s)}
                   </Button>
@@ -861,15 +856,15 @@ export default function TicketDetailPage() {
                       !ticket.repair_category || !v.category
                         ? true
                         : v.category.toLowerCase() ===
-                          ticket.repair_category?.toLowerCase();
+                        ticket.repair_category?.toLowerCase();
 
                     const buildingMatch =
                       !ticket.building_id || !v.building_ids
                         ? true
                         : v.building_ids
-                            .split(',')
-                            .map((id) => id.trim())
-                            .includes(String(ticket.building_id));
+                          .split(',')
+                          .map((id) => id.trim())
+                          .includes(String(ticket.building_id));
 
                     return categoryMatch && buildingMatch;
                   });

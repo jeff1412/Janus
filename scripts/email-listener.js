@@ -100,21 +100,49 @@ async function listen() {
 
     const client = new ImapFlow(config);
 
+    // Prevent two simultaneous processing runs
+    let isProcessing = false;
+
+    // Process all unread emails one at a time
+    async function processAllUnread() {
+        if (isProcessing) {
+            console.log('[LISTENER] Already processing, will check again shortly...');
+            return;
+        }
+        isProcessing = true;
+        try {
+            const uids = await client.search({ unseen: true });
+            if (!uids || uids.length === 0) {
+                console.log('[LISTENER] No unread emails to process.');
+                return;
+            }
+            console.log(`[LISTENER] Found ${uids.length} unread email(s). Processing one at a time...`);
+            for (const uid of uids) {
+                await processOneEmail(client, uid);
+            }
+            console.log('[LISTENER] Done processing unread emails.');
+        } catch (err) {
+            console.error('[LISTENER] Error in processAllUnread:', err.message);
+        } finally {
+            isProcessing = false;
+        }
+    }
+
     try {
         await client.connect();
 
         // Select INBOX
         let lock = await client.getMailboxLock('INBOX');
         try {
-            console.log('Connected! Waiting for new emails...');
+            console.log('Connected!');
 
-            // Initial check for UNSEEN
-            await processUnseen(client);
+            // On startup: process all existing unread emails one at a time
+            await processAllUnread();
 
-            // Listen for changes
+            // When a new email arrives, process all unread again (one at a time)
             client.on('exists', async (data) => {
-                console.log(`New email detected (count: ${data.count}). Processing...`);
-                await processUnseen(client);
+                console.log(`[LISTENER] New mail detected (count: ${data.count}). Checking for unread...`);
+                await processAllUnread();
             });
 
             // Keep alive
@@ -129,53 +157,97 @@ async function listen() {
     }
 }
 
-async function processUnseen(client) {
+// Only process emails that arrived AFTER the listener started (UID > highestKnownUid)
+async function processNewOnly(client, highestKnownUid) {
     try {
-        // Search for unseen messages
-        const messages = await client.search({ unseen: true });
+        const allUnseen = await client.search({ unseen: true });
+        if (!allUnseen || allUnseen.length === 0) return highestKnownUid;
 
-        if (messages.length === 0) return;
-
-        console.log(`Processing ${messages.length} unseen messages...`);
-
-        for (let uid of messages) {
-            try {
-                // Fetch message source
-                const message = await client.fetchOne(uid, { source: true });
-                const parsed = await simpleParser(message.source);
-
-                const fromEmail = parsed.from?.value?.[0]?.address;
-                const subject = parsed.subject || '(No Subject)';
-                const bodyText = parsed.text || '(No Body)';
-
-                if (!fromEmail) continue;
-
-                console.log(`\n[NEW EMAIL]`);
-                console.log(`From: ${fromEmail}`);
-                console.log(`Subject: ${subject}`);
-
-                // Call the local API
-                const response = await fetch('http://localhost:3000/api/email-intake', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fromEmail, subject, bodyText })
-                });
-
-                const result = await response.json();
-                if (result.ok) {
-                    console.log(`Successfully ingested. Ticket ID: ${result.ticketId}`);
-                } else {
-                    console.error(`Ingestion failed: ${result.error}`);
-                }
-
-                // Mark as seen
-                await client.messageFlagsAdd(uid, ['\\Seen']);
-            } catch (err) {
-                console.error('Error processing message UID:', uid, err);
-            }
+        // Filter to only truly new emails
+        const newMessages = allUnseen.filter(uid => uid > highestKnownUid);
+        if (newMessages.length === 0) {
+            console.log('[LISTENER] No new emails above known UID. Skipping.');
+            return highestKnownUid;
         }
+
+        console.log(`[LISTENER] ${newMessages.length} new email(s) to process (UIDs: ${newMessages.join(', ')})`);
+
+        let latestUid = highestKnownUid;
+        for (let uid of newMessages) {
+            await processOneEmail(client, uid);
+            if (uid > latestUid) latestUid = uid;
+        }
+
+        return latestUid;
     } catch (err) {
-        console.error('Error listing unseen messages:', err);
+        console.error('[LISTENER] Error in processNewOnly:', err);
+        return highestKnownUid;
+    }
+}
+
+// Cache of UIDs currently in progress to prevent double-firing
+const activeUids = new Set();
+
+async function processOneEmail(client, uid) {
+    if (activeUids.has(uid)) {
+        console.log(`[LISTENER] UID ${uid} is already being processed. Skipping.`);
+        return;
+    }
+    activeUids.add(uid);
+    try {
+        const message = await client.fetchOne(uid, { source: true });
+        if (!message || !message.source) {
+            console.warn(`[LISTENER] No source for UID ${uid}`);
+            return;
+        }
+        const parsed = await simpleParser(message.source);
+
+        const fromEmail = parsed.from?.value?.[0]?.address;
+        const subject = parsed.subject || '(No Subject)';
+        const bodyText = (parsed.text || '').trim() || parsed.textAsHtml || parsed.html || '(No Body)';
+        const messageId = parsed.messageId || `uid-${uid}-${parsed.date?.getTime() || 'stable'}`;
+
+        console.log(`\n========================================`);
+        console.log(`[LISTENER] UID: ${uid} | ID: ${messageId}`);
+        console.log(`[LISTENER] From: ${fromEmail}`);
+        console.log(`[LISTENER] Subject: ${subject}`);
+        console.log(`[LISTENER] Body Preview: ${String(bodyText).substring(0, 120)}`);
+        console.log(`========================================`);
+
+        if (!fromEmail) {
+            console.warn('[LISTENER] No fromEmail found, skipping.');
+            await client.messageFlagsAdd(uid, ['\\Seen']);
+            return;
+        }
+
+        // Call the email-intake API
+        console.log(`[LISTENER] Calling email-intake API...`);
+        let response, result;
+        try {
+            response = await fetch('http://localhost:3000/api/email-intake', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fromEmail, subject, bodyText, messageId })
+            });
+            result = await response.json();
+        } catch (fetchErr) {
+            console.error('[LISTENER] Failed to reach API (is Next.js running on port 3000?):', fetchErr.message);
+            return;
+        }
+
+        if (response.ok && result.ok) {
+            console.log(`[LISTENER] SUCCESS. Ticket ID: ${result.ticketId || 'new'} | Follow-up: ${result.isFollowUp || false} | Reason: ${result.reason || 'n/a'}`);
+        } else {
+            console.error(`[LISTENER] FAILED. HTTP ${response.status}: ${JSON.stringify(result)}`);
+        }
+
+        // Always mark as seen so it isn't processed again
+        await client.messageFlagsAdd(uid, ['\\Seen']);
+        console.log(`[LISTENER] Marked UID ${uid} as Seen.`);
+    } catch (err) {
+        console.error(`[LISTENER] Error processing UID ${uid}:`, err.message);
+    } finally {
+        activeUids.delete(uid);
     }
 }
 
